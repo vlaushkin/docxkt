@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">docxkt sample</string>
+    <string name="intro">docxkt sample\n\nTap a button to build a tiny .docx and hand it to Android.</string>
+    <string name="action_save_downloads">Save to Downloads</string>
+    <string name="action_share">Share</string>
+    <string name="share_chooser_title">Share sample document</string>
+    <string name="saved_toast">Saved: %1$s</string>
+    <string name="error_toast">Error: %1$s</string>
+</resources>

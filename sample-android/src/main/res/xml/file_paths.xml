@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Matches the default subdirectory used by :android's
+         Document.asFileProviderUri(...). -->
+    <cache-path
+        name="docx"
+        path="docx/" />
+</paths>

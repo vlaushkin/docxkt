@@ -1,0 +1,16 @@
+.git/
+.gradle/
+build/
+**/build/
+.idea/
+*.iml
+.DS_Store
+
+# Never ship host caches / secrets into the build context
+.claude/
+.env
+.env.*
+local.properties
+
+# Progress artifacts are produced inside the sandbox, no need to ship them in
+.progress/

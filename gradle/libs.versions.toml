@@ -1,0 +1,36 @@
+[versions]
+kotlin = "2.3.20"
+junit = "5.11.3"
+junit-platform = "1.11.3"
+xmlunit = "2.10.0"
+# Android Gradle Plugin — bumped alongside Kotlin 2.3.x, which requires
+# AGP 8.8+ for its embedded Kotlin compiler classpath. compileSdk = 36
+# supported from AGP 8.6.
+agp = "8.13.2"
+androidx-core = "1.15.0"
+androidx-test-runner = "1.6.2"
+androidx-test-ext-junit = "1.2.1"
+androidx-activity = "1.9.3"
+# Dokka 2.x is the current Kotlin doc generator. Used to produce the
+# `-javadoc.jar` artifact Maven Central requires for every publication.
+dokka = "2.0.0"
+
+[libraries]
+junit-bom = { group = "org.junit", name = "junit-bom", version.ref = "junit" }
+junit-jupiter = { group = "org.junit.jupiter", name = "junit-jupiter" }
+junit-jupiter-params = { group = "org.junit.jupiter", name = "junit-jupiter-params" }
+junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version.ref = "junit-platform" }
+xmlunit-core = { group = "org.xmlunit", name = "xmlunit-core", version.ref = "xmlunit" }
+xmlunit-matchers = { group = "org.xmlunit", name = "xmlunit-matchers", version.ref = "xmlunit" }
+kotlin-test = { group = "org.jetbrains.kotlin", name = "kotlin-test" }
+androidx-core = { group = "androidx.core", name = "core", version.ref = "androidx-core" }
+androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidx-test-runner" }
+androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidx-test-ext-junit" }
+androidx-activity = { group = "androidx.activity", name = "activity", version.ref = "androidx-activity" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+android-library = { id = "com.android.library", version.ref = "agp" }
+android-application = { id = "com.android.application", version.ref = "agp" }
+dokka = { id = "org.jetbrains.dokka", version.ref = "dokka" }

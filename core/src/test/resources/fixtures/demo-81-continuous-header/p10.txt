@@ -1,0 +1,1 @@
+The second section starts with the headline above. Move cursor to the end of this text and press enter until next page is generated in continuous section break mode.
