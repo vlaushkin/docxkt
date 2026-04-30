@@ -62,7 +62,11 @@ Top-level (children of `Document { … }`):
 - `Paragraph(numbering: NumberingReference("id", level: N)) { … }` — list item
 - `Table { Row { Cell { … } } }` — basic tables
 - `Header { … }` / `Footer { … }` — default page header/footer
-- `Section(orientation:, columns:, type:, hasTitlePage:)` — section break
+- `Section(orientation:, columns:, type:, hasTitlePage:, margins:)` —
+  section break. `margins` accepts a `Section.PageMargins` (twips), or
+  the `.inches(top:right:bottom:left:header:footer:gutter:)` /
+  `.cm(...)` factories. Reaches parity with the Kotlin
+  `sectionBreak { margins(...) }` surface — see example below.
 - `Properties(title:, creator:, keywords:, custom:, …)` — document metadata
 - `ParagraphStyle(id:, name:, basedOn:, bold:, italic:, size:, color:, fontFamily:, …)` — style definition
 - `CharacterStyle(id:, …)` — run-style definition
@@ -84,12 +88,30 @@ Annotations (footnotes, endnotes, comments):
 - `FootnoteReference(id:)` / `EndnoteReference(id:)` — inline reference markers
 - `CommentRangeStart(id:)` / `CommentRangeEnd(id:)` / `CommentReference(id:)` — inline comment-range markers
 
+### Section page setup
+
+```swift
+Document {
+    Paragraph { Text("Letter-size, narrow margins") }
+    Section(
+        orientation: .landscape,
+        margins: .inches(top: 0.5, right: 0.5, bottom: 0.5, left: 0.5),
+    )
+    Paragraph { Text("Following section is landscape with half-inch margins") }
+}
+```
+
+Twips work too if you'd rather not convert (`Section.PageMargins(top:
+720, ...)` — 1 inch = 1440 twips). Defaults match upstream's
+`<w:pgMar>`: `top/right/bottom/left = 1440`, `header/footer = 708`,
+`gutter = 0`. Any field you don't set keeps that default.
+
 ## Reaching the raw Kotlin API
 
 The facade covers every scope upstream's TypeScript DSL exposes. If
 you need a feature not yet in the Swift surface (e.g. line numbering,
-tabs, math, frame positioning), drop into the bridged Kotlin types
-directly:
+tabs, math, frame positioning, page borders), drop into the bridged
+Kotlin types directly:
 
 ```swift
 import Docxkt

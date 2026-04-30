@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.1
+
+- `DocxktDSL.Section` now accepts `margins:` — page margins (`<w:pgMar>`)
+  reach parity with the Kotlin `sectionBreak { margins(...) }` scope.
+  New `Section.PageMargins` struct holds `top/right/bottom/left/header/
+  footer/gutter` in twips with upstream-matching defaults
+  (`1440 / 1440 / 1440 / 1440 / 708 / 708 / 0`); `.inches(...)` and
+  `.cm(...)` factories build from physical units.
+- No Kotlin core / patcher changes — XCFramework binary is unchanged
+  from v1.1.0.
+
 ## 1.1.0
 
 Kotlin Multiplatform release. JVM and Android consumers keep the v1 API;

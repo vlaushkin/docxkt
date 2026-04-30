@@ -388,6 +388,63 @@ final class FacadeFidelityTests: XCTestCase {
         )
     }
 
+    func testSectionBreakWithMarginsTwips() {
+        assertSameBytes(
+            facade: Document {
+                Paragraph { Text("before") }
+                Section(margins: Section.PageMargins(
+                    top: 720, right: 1080, bottom: 720, left: 1080,
+                    header: 360, footer: 360, gutter: 0,
+                ))
+                Paragraph { Text("after") }
+            },
+            raw: DocumentKt.document { scope in
+                scope.paragraph { p in p.text(value: "before") }
+                scope.sectionBreak { ss in
+                    ss.margins(
+                        top: KotlinInt(int: 720),
+                        right: KotlinInt(int: 1080),
+                        bottom: KotlinInt(int: 720),
+                        left: KotlinInt(int: 1080),
+                        header: KotlinInt(int: 360),
+                        footer: KotlinInt(int: 360),
+                        gutter: KotlinInt(int: 0),
+                    )
+                }
+                scope.paragraph { p in p.text(value: "after") }
+            },
+        )
+    }
+
+    func testSectionBreakWithMarginsInches() {
+        assertSameBytes(
+            facade: Document {
+                Paragraph { Text("before") }
+                Section(
+                    orientation: .landscape,
+                    margins: .inches(top: 0.5, right: 0.75, bottom: 0.5, left: 0.75),
+                )
+                Paragraph { Text("after") }
+            },
+            raw: DocumentKt.document { scope in
+                scope.paragraph { p in p.text(value: "before") }
+                scope.sectionBreak { ss in
+                    ss.a4Landscape()
+                    ss.margins(
+                        top: KotlinInt(int: 720),
+                        right: KotlinInt(int: 1080),
+                        bottom: KotlinInt(int: 720),
+                        left: KotlinInt(int: 1080),
+                        header: KotlinInt(int: 706),
+                        footer: KotlinInt(int: 706),
+                        gutter: KotlinInt(int: 0),
+                    )
+                }
+                scope.paragraph { p in p.text(value: "after") }
+            },
+        )
+    }
+
     func testFootnoteAndReference() {
         assertSameBytes(
             facade: Document {

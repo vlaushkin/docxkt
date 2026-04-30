@@ -8,7 +8,7 @@ golden-fixture test harness pinning the wire to upstream.
 
 ## Status
 
-**v1.1.0** — Kotlin Multiplatform release. JVM and Android consumers
+**v1.1.1** — Kotlin Multiplatform release. JVM and Android consumers
 keep the v1 API; iOS / macOS land via an Apple `XCFramework` and an
 optional SwiftUI-style facade Swift Package.
 
@@ -156,6 +156,10 @@ let doc = Document {
 try doc.write(to: outputURL)
 ```
 
+`Section` accepts `orientation`, `columns`, `type`, `hasTitlePage`, and
+`margins` (twips, or `.inches(...)` / `.cm(...)` factories) — full parity
+with the Kotlin `sectionBreak { … }` scope's most-used surface.
+
 A complete iOS + macOS sample app lives at `sample-apple/`. Open
 `sample-apple.xcodeproj` and run the `SampleApple` scheme on either
 destination.
@@ -253,7 +257,7 @@ Test counts:
 - `./gradlew :core:macosArm64Test` — 269 tests
 - `./gradlew :core:iosSimulatorArm64Test` — 269 tests
 - `./gradlew :patcher:test` — 104 tests
-- `cd swift-facade && swift test` — 45 tests (16 smoke + 29 facade-vs-raw fidelity)
+- `cd swift-facade && swift test` — 47 tests (16 smoke + 31 facade-vs-raw fidelity)
 
 Toolchain: Kotlin 2.3.21, JVM 21, AGP 8.13.x, `explicitApi()` enabled
 in `:core` and `:patcher`. iOS 17+, macOS 14+ (arm64 only —
