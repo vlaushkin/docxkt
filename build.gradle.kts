@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.kotlin.android) apply false
+    alias(libs.plugins.kotlin.multiplatform) apply false
     alias(libs.plugins.android.library) apply false
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.dokka) apply false
@@ -12,5 +13,5 @@ plugins {
 // `io.docxkt` later is a one-line flip after registering the namespace.
 allprojects {
     group = "io.github.vlaushkin"
-    version = "1.0.0"
+    version = "1.1.0"
 }

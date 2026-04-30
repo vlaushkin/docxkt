@@ -1,89 +1,114 @@
 // Port of: src/patcher/util.ts (toJson — XML to tree). Upstream uses
-// xml-js for JS object trees; we use a StAX-based reader that builds
-// a `org.w3c.dom.Document` while preserving the source's namespace
-// declaration order, `xml:space="preserve"`, and duplicate attribute
-// values. The default JDK DocumentBuilder reorganises all of those
-// during parse, breaking byte-equal round-trip.
+// xml-js for JS object trees; we drive pdvrieze/xmlutil's streaming
+// reader directly into an `nl.adaptivity.xmlutil.dom2` document.
 //
-// The DOM remains the IR (downstream code uses NS-aware DOM APIs:
-// `getElementsByTagNameNS`, `createElementNS`, `namespaceURI`,
-// `localName`). Only the parse-time construction is hand-rolled.
+// Pre-migration this used a StAX-based reader plus the JDK
+// `DocumentBuilder` and stashed source-order attribute lists on each
+// element via DOM user-data so the writer could undo the platform
+// DOM's alphabetisation of namespace declarations.
 //
-// The parser also stashes the SOURCE attribute order on each Element
-// as user-data under [SOURCE_ATTR_ORDER_KEY]. The companion writer
-// (`OoxmlWriter`) prefers that list over the JDK NamedNodeMap which
-// alphabetises `xmlns:*` declarations.
+// xmlutil's DOM (a `WrappingNamedNodeMap` over the platform DOM)
+// has the same alphabetisation behaviour for namespace
+// declarations, so we keep an out-of-band side channel — but as a
+// regular `HashMap<Element, ...>`, since `dom2.Node` does not
+// expose user-data getters/setters and xmlutil wraps every node
+// access in a fresh wrapper instance (so identity hashing is not
+// usable here).
 package io.docxkt.patcher.io
 
-import org.w3c.dom.Document
-import org.w3c.dom.Element
-import org.w3c.dom.Node
+import nl.adaptivity.xmlutil.EventType
+import nl.adaptivity.xmlutil.XmlReader
+import nl.adaptivity.xmlutil.XmlUtilInternal
+import nl.adaptivity.xmlutil.dom2.CDATASection
+import nl.adaptivity.xmlutil.dom2.Document
+import nl.adaptivity.xmlutil.dom2.Element
+import nl.adaptivity.xmlutil.dom2.Text
+import nl.adaptivity.xmlutil.dom2.data
+import nl.adaptivity.xmlutil.dom2.documentElement
+import nl.adaptivity.xmlutil.dom2.lastChild
+import nl.adaptivity.xmlutil.newGenericReader
+import nl.adaptivity.xmlutil.xmlStreaming
 import java.io.ByteArrayInputStream
-import javax.xml.parsers.DocumentBuilderFactory
-import javax.xml.stream.XMLInputFactory
-import javax.xml.stream.XMLStreamConstants
 
 /**
- * User-data key carrying the source-order list of `(qname, value)`
- * pairs for an element's attributes (xmlns declarations + regular
- * attributes, in the order they appeared in the input). The writer
- * iterates this list — when present — to preserve byte-equal round
- * trip; otherwise it falls back to NamedNodeMap iteration.
+ * Side-channel mapping each parsed [Element] to the source-order
+ * list of `(qname, value)` attribute pairs (xmlns declarations
+ * first, then regular attributes, in source order). [OoxmlWriter]
+ * iterates this list when serializing, instead of the DOM's
+ * `NamedNodeMap` (which alphabetises `xmlns:*`).
+ *
+ * Entries are added during [OoxmlParser.parse]. xmlutil's `dom2`
+ * facade wraps the platform DOM nodes in a fresh wrapper on every
+ * accessor call, so `IdentityHashMap` would lose entries — we use
+ * a regular `HashMap` and rely on `dom2.Element`'s equals/hashCode
+ * delegating to the underlying platform node's identity.
  */
-internal const val SOURCE_ATTR_ORDER_KEY: String = "io.docxkt.patcher.io.sourceAttrOrder"
+internal object AttrSourceOrder {
+    private val map = HashMap<Element, List<Pair<String, String>>>()
+
+    @Synchronized
+    internal fun put(element: Element, list: List<Pair<String, String>>) {
+        map[element] = list
+    }
+
+    @Synchronized
+    internal fun get(element: Element): List<Pair<String, String>>? = map[element]
+
+    @Synchronized
+    internal fun forget(element: Element) {
+        map.remove(element)
+    }
+}
 
 /**
- * Parses an OOXML part's XML bytes into a `org.w3c.dom.Document`.
+ * Parses an OOXML part's XML bytes into an xmlutil
+ * [nl.adaptivity.xmlutil.dom2.Document].
  *
- * Uses StAX (`javax.xml.stream.XMLStreamReader`) for the actual
- * parse, then constructs DOM nodes element-by-element. Compared
- * to the JDK DocumentBuilder, this guarantees:
- *
- * - **Namespace-attribute order is preserved.** `<w:document xmlns:w
- *   xmlns:r xmlns:m ...>` keeps the source order; the JDK alphabetises
- *   it.
- * - **`xml:space="preserve"` is preserved** on text-bearing elements
- *   (`<w:t>`, `<w:instrText>`, etc.). The JDK silently drops it.
- * - **Duplicate attribute values are preserved.** The JDK would dedupe
- *   `mc:Ignorable="w14 w15 wp14"` to `"w14 wp14"` (treats `w15` as
- *   duplicate of something it conflates with). We pass values through
- *   verbatim.
- *
- * Schema validation (XSD) is NOT performed. Malformed XML throws an
- * [javax.xml.stream.XMLStreamException].
+ * Schema validation (XSD) is NOT performed. Malformed XML throws
+ * an `nl.adaptivity.xmlutil.XmlException`. DOCTYPE declarations
+ * are refused for XXE hardening — even non-validating readers
+ * can be coerced into expanding entity references that point at
+ * host resources, so we treat any DOCDECL event as a hard error.
  */
 internal object OoxmlParser {
 
-    private val xmlInputFactory: XMLInputFactory = XMLInputFactory.newInstance().apply {
-        setProperty(XMLInputFactory.IS_NAMESPACE_AWARE, true)
-        setProperty(XMLInputFactory.IS_COALESCING, true)
-        setProperty(XMLInputFactory.IS_REPLACING_ENTITY_REFERENCES, true)
-        // XXE hardening — disable DOCTYPE entirely.
-        setProperty(XMLInputFactory.SUPPORT_DTD, false)
-        setProperty("javax.xml.stream.isSupportingExternalEntities", false)
-    }
-
-    private val docBuilderFactory: DocumentBuilderFactory =
-        DocumentBuilderFactory.newInstance().apply {
-            isNamespaceAware = true
-            // XXE hardening — defensive; we don't actually parse with
-            // this builder, only use it to produce empty DOMs.
-            setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
-        }
-
-    /** Parse [bytes] as XML and return the resulting DOM document. */
+    /**
+     * Parse [bytes] as XML and return the resulting DOM document.
+     *
+     * `DomWriter.target` is annotated `@XmlUtilInternal` (xmlutil
+     * does not stabilise that internal field across releases). We
+     * opt in: the target is exactly the empty document we use as
+     * the construction substrate; no other API offers a fresh
+     * empty `dom2.Document` on the JVM.
+     */
+    @OptIn(XmlUtilInternal::class)
     internal fun parse(bytes: ByteArray): Document {
-        val doc = docBuilderFactory.newDocumentBuilder().newDocument()
-        val reader = xmlInputFactory.createXMLStreamReader(ByteArrayInputStream(bytes))
+        // The platform (StAX-backed) reader on JVM alphabetises
+        // namespace declarations exposed via `namespaceDecls`.
+        // xmlutil's pure-Kotlin generic reader preserves source
+        // order, which the patcher relies on to round-trip
+        // `<w:document>`'s 30+ namespace attributes.
+        val reader = xmlStreaming.newGenericReader(ByteArrayInputStream(bytes))
         try {
-            // Stack of currently-open elements; root sits at index 0
-            // once we've encountered START_ELEMENT for the document
-            // root.
+            // xmlutil's `genericDomImplementation` (the platform
+            // DOM on JVM) requires a non-empty qualified name for
+            // `createDocument`, so we seed the doc with a placeholder
+            // root and immediately remove it. The remaining empty
+            // document is the construction substrate for the manual
+            // tree build below.
+            val doc = xmlStreaming.genericDomImplementation
+                .createDocument("urn:placeholder", "placeholder", null)
+            val placeholder = doc.documentElement
+            if (placeholder != null) doc.removeChild(placeholder)
             val stack = ArrayDeque<Element>()
 
             while (reader.hasNext()) {
                 when (reader.next()) {
-                    XMLStreamConstants.START_ELEMENT -> {
+                    EventType.DOCDECL ->
+                        throw IllegalArgumentException(
+                            "DOCTYPE declaration is not permitted in OOXML parts",
+                        )
+                    EventType.START_ELEMENT -> {
                         val element = createElement(doc, reader)
                         if (stack.isEmpty()) {
                             doc.appendChild(element)
@@ -92,93 +117,87 @@ internal object OoxmlParser {
                         }
                         stack.addLast(element)
                     }
-                    XMLStreamConstants.END_ELEMENT -> {
+                    EventType.END_ELEMENT -> {
                         stack.removeLast()
                     }
-                    XMLStreamConstants.CHARACTERS,
-                    XMLStreamConstants.SPACE,
-                    XMLStreamConstants.ENTITY_REFERENCE -> {
+                    EventType.TEXT,
+                    EventType.IGNORABLE_WHITESPACE,
+                    EventType.ENTITY_REF -> {
                         if (stack.isEmpty()) continue
                         val text = reader.text
-                        if (text.isNotEmpty()) {
-                            stack.last().appendChild(doc.createTextNode(text))
-                        }
+                        if (text.isEmpty()) continue
+                        appendText(doc, stack.last(), text)
                     }
-                    XMLStreamConstants.CDATA -> {
+                    EventType.CDSECT -> {
                         if (stack.isEmpty()) continue
                         stack.last().appendChild(doc.createCDATASection(reader.text))
                     }
-                    XMLStreamConstants.COMMENT -> {
+                    EventType.COMMENT -> {
                         if (stack.isEmpty()) continue
                         stack.last().appendChild(doc.createComment(reader.text))
                     }
-                    XMLStreamConstants.PROCESSING_INSTRUCTION -> {
+                    EventType.PROCESSING_INSTRUCTION -> {
                         if (stack.isEmpty()) continue
                         stack.last().appendChild(
-                            doc.createProcessingInstruction(reader.piTarget, reader.piData ?: "")
+                            doc.createProcessingInstruction(reader.piTarget, reader.piData ?: ""),
                         )
                     }
-                    XMLStreamConstants.DTD -> {
-                        // XXE hardening — refuse any document carrying a
-                        // DOCTYPE declaration.
-                        throw javax.xml.stream.XMLStreamException(
-                            "DOCTYPE declaration is not permitted in OOXML parts",
-                        )
+                    EventType.START_DOCUMENT,
+                    EventType.END_DOCUMENT,
+                    EventType.ATTRIBUTE -> {
+                        // No-op: attributes ride START_ELEMENT;
+                        // document boundaries don't materialise as
+                        // DOM nodes.
                     }
-                    // START_DOCUMENT / END_DOCUMENT: ignore.
                 }
             }
+            return doc
         } finally {
             reader.close()
         }
-        return doc
     }
 
     /**
-     * Build a single DOM Element from the StAX reader's current
+     * Build a single DOM Element from the reader's current
      * START_ELEMENT event. Namespace declarations come first (in
      * source order), then regular attributes (in source order).
-     * Both kinds round-trip verbatim through the writer.
+     * Both kinds round-trip verbatim through [OoxmlWriter] thanks
+     * to [AttrSourceOrder].
      */
-    private fun createElement(
-        doc: Document,
-        reader: javax.xml.stream.XMLStreamReader,
-    ): Element {
+    private fun createElement(doc: Document, reader: XmlReader): Element {
         val prefix = reader.prefix.orEmpty()
         val localName = reader.localName
         val qname = if (prefix.isEmpty()) localName else "$prefix:$localName"
         val uri = reader.namespaceURI
-        val element = if (!uri.isNullOrEmpty()) {
+        val element = if (uri.isNotEmpty()) {
             doc.createElementNS(uri, qname)
         } else {
             doc.createElement(qname)
         }
-        // Source-order attribute list: namespace declarations first
-        // (in StAX-reported order), then regular attributes (in
-        // StAX-reported order). The JDK DOM's NamedNodeMap silently
-        // alphabetises xmlns:* declarations, so the writer must use
-        // this list — not the NamedNodeMap — to round-trip cleanly.
-        val sourceOrder = ArrayList<Pair<String, String>>(
-            reader.namespaceCount + reader.attributeCount,
-        )
-        // Namespace declarations on this element, in source order.
-        // StAX exposes these via getNamespaceCount/getNamespacePrefix
-        // /getNamespaceURI rather than as regular attributes.
-        for (i in 0 until reader.namespaceCount) {
-            val nsPrefix = reader.getNamespacePrefix(i).orEmpty()
-            val nsUri = reader.getNamespaceURI(i).orEmpty()
+        val nsCount = reader.namespaceDecls.size
+        val sourceOrder = ArrayList<Pair<String, String>>(nsCount + reader.attributeCount)
+        // Namespace declarations on this element, in source order
+        // (the generic KtXmlReader preserves the order we want).
+        for (ns in reader.namespaceDecls) {
+            val nsPrefix = ns.prefix
+            val nsUri = ns.namespaceURI
             val attrName = if (nsPrefix.isEmpty()) "xmlns" else "xmlns:$nsPrefix"
             element.setAttribute(attrName, nsUri)
             sourceOrder += attrName to nsUri
         }
-        // Regular attributes in source order. xml:space lives in the
-        // XML namespace; setAttributeNS with that URI preserves it.
+        // Regular attributes in source order. xml:space lives in
+        // the XML namespace; setAttributeNS with that URI preserves
+        // the qualified form.
         for (i in 0 until reader.attributeCount) {
             val aPrefix = reader.getAttributePrefix(i).orEmpty()
             val aLocal = reader.getAttributeLocalName(i)
             val aQname = if (aPrefix.isEmpty()) aLocal else "$aPrefix:$aLocal"
             val aUri = reader.getAttributeNamespace(i)
             val aValue = reader.getAttributeValue(i)
+            // Some readers (StAX-backed) surface `xmlns:*`
+            // declarations as regular attributes too. Skip them —
+            // `namespaceDecls` is the canonical source.
+            if (aQname == "xmlns" || aQname.startsWith("xmlns:")) continue
             if (!aUri.isNullOrEmpty()) {
                 element.setAttributeNS(aUri, aQname, aValue)
             } else {
@@ -186,7 +205,25 @@ internal object OoxmlParser {
             }
             sourceOrder += aQname to aValue
         }
-        element.setUserData(SOURCE_ATTR_ORDER_KEY, sourceOrder, null)
+        AttrSourceOrder.put(element, sourceOrder)
         return element
+    }
+
+    /**
+     * Append [text] to [parent], coalescing with the existing
+     * trailing `Text` child if one exists. xmlutil emits a TEXT
+     * event per entity boundary (`Hello &lt;%name%&gt;!` arrives
+     * as five TEXT events with the entity-decoded characters in
+     * between), so we glue them into a single `Text` node here.
+     * The patcher's marker scanner expects each `<w:t>` to carry
+     * one contiguous run of text per sibling group.
+     */
+    private fun appendText(doc: Document, parent: Element, text: String) {
+        val last = parent.lastChild
+        if (last is Text && last !is CDATASection) {
+            last.data = last.data + text
+        } else {
+            parent.appendChild(doc.createTextNode(text))
+        }
     }
 }

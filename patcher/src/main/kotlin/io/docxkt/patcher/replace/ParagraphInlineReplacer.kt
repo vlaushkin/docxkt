@@ -3,11 +3,26 @@
 package io.docxkt.patcher.replace
 
 import io.docxkt.patcher.Patch
-import org.w3c.dom.Document
-import org.w3c.dom.Element
-import org.w3c.dom.Node
-import org.w3c.dom.Text
-import javax.xml.parsers.DocumentBuilderFactory
+import io.docxkt.patcher.io.OoxmlParser
+import nl.adaptivity.xmlutil.dom2.Attr
+import nl.adaptivity.xmlutil.dom2.Document
+import nl.adaptivity.xmlutil.dom2.Element
+import nl.adaptivity.xmlutil.dom2.Node
+import nl.adaptivity.xmlutil.dom2.CDATASection
+import nl.adaptivity.xmlutil.dom2.Text
+import nl.adaptivity.xmlutil.dom2.attributes
+import nl.adaptivity.xmlutil.dom2.childNodes
+import nl.adaptivity.xmlutil.dom2.data
+import nl.adaptivity.xmlutil.dom2.documentElement
+import nl.adaptivity.xmlutil.dom2.firstChild
+import nl.adaptivity.xmlutil.dom2.length
+import nl.adaptivity.xmlutil.dom2.localName
+import nl.adaptivity.xmlutil.dom2.name
+import nl.adaptivity.xmlutil.dom2.namespaceURI
+import nl.adaptivity.xmlutil.dom2.nextSibling
+import nl.adaptivity.xmlutil.dom2.ownerDocument
+import nl.adaptivity.xmlutil.dom2.parentNode
+import nl.adaptivity.xmlutil.dom2.value
 
 /**
  * INLINE replacement at a `{{key}}` marker. Splits the marker run
@@ -54,7 +69,8 @@ internal object ParagraphInlineReplacer {
         markerRegex: Regex,
         keepOriginalStyles: Boolean,
     ): String? {
-        val paragraphs = doc.getElementsByTagNameNS(W_NAMESPACE, "p")
+        val root = doc.documentElement!!
+        val paragraphs = root.getElementsByTagNameNS(W_NAMESPACE, "p")
         val paragraphList = (0 until paragraphs.length).map { paragraphs.item(it) as Element }
         for (paragraph in paragraphList) {
             val rendered = renderParagraph(paragraph)
@@ -114,14 +130,14 @@ internal object ParagraphInlineReplacer {
             // createTextElementContents("") returns a fresh
             // attribute-free text element.
             val tn = rendered.spans[i].textNode
-            val parent = tn.parentNode
-            if (parent != null && parent.nodeType == Node.ELEMENT_NODE) {
-                (parent as Element).removeAttributeNS(
+            val tParent = tn.parentNode
+            if (tParent is Element) {
+                tParent.removeAttributeNS(
                     io.docxkt.xml.Namespaces.XML_W3C,
                     "space",
                 )
             }
-            parent?.removeChild(tn)
+            tParent?.removeChild(tn)
         }
         if (firstIdx != lastIdx) {
             last.textNode.data = suffix
@@ -166,17 +182,16 @@ internal object ParagraphInlineReplacer {
     private fun runAfterMarkerText(lastInsertedRun: Node): Text? {
         var n: Node? = lastInsertedRun.nextSibling
         while (n != null) {
-            if (n.nodeType == Node.ELEMENT_NODE && n.namespaceURI == W_NAMESPACE && n.localName == "r") {
+            if (n is Element && n.namespaceURI == W_NAMESPACE && n.localName == "r") {
                 val children = n.childNodes
                 for (i in 0 until children.length) {
-                    val c = children.item(i)
-                    if (c.nodeType == Node.ELEMENT_NODE && c.namespaceURI == W_NAMESPACE && c.localName == "t") {
-                        val tEl = c as Element
+                    val c = children.item(i) ?: continue
+                    if (c is Element && c.namespaceURI == W_NAMESPACE && c.localName == "t") {
                         // Find the first text node child.
-                        val tChildren = tEl.childNodes
+                        val tChildren = c.childNodes
                         for (j in 0 until tChildren.length) {
-                            val tc = tChildren.item(j)
-                            if (tc.nodeType == Node.TEXT_NODE) return tc as Text
+                            val tc = tChildren.item(j) ?: continue
+                            if (tc is Text && tc !is CDATASection) return tc
                         }
                         return null
                     }
@@ -190,8 +205,8 @@ internal object ParagraphInlineReplacer {
 
     private fun applyXmlSpacePreserve(textNode: Text) {
         val parent = textNode.parentNode
-        if (parent != null && parent.nodeType == Node.ELEMENT_NODE) {
-            (parent as Element).setAttributeNS(
+        if (parent is Element) {
+            parent.setAttributeNS(
                 io.docxkt.xml.Namespaces.XML_W3C,
                 "xml:space",
                 "preserve",
@@ -202,20 +217,19 @@ internal object ParagraphInlineReplacer {
     /**
      * Parse each `<w:r>...</w:r>` (or `<w:hyperlink>...</w:hyperlink>`)
      * snippet into a fresh DOM element rooted in [doc]. The wrapper
-     * declares both `xmlns:w` and `xmlns:r` so hyperlink attributes
-     * (`r:id="rIdN"`) bind correctly.
+     * declares `xmlns:w`, `xmlns:r`, `xmlns:wp`, `xmlns:a`, and
+     * `xmlns:pic` so hyperlink/drawing attributes (`r:id="rIdN"`,
+     * etc.) bind correctly.
      */
     private fun parseRuns(doc: Document, runXmls: List<String>): List<Element> {
         val results = mutableListOf<Element>()
-        val factory = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
-        val builder = factory.newDocumentBuilder()
         for (xml in runXmls) {
             val wrapped = """<root xmlns:w="$W_NAMESPACE" xmlns:r="$R_NAMESPACE" xmlns:wp="$WP_NAMESPACE" xmlns:a="$A_NAMESPACE" xmlns:pic="$PIC_NAMESPACE">$xml</root>"""
-            val parsed = builder.parse(wrapped.byteInputStream())
-            val children = parsed.documentElement.childNodes
+            val parsed = OoxmlParser.parse(wrapped.toByteArray(Charsets.UTF_8))
+            val children = parsed.documentElement!!.childNodes
             for (i in 0 until children.length) {
-                val n = children.item(i)
-                if (n.nodeType == Node.ELEMENT_NODE && n.namespaceURI == W_NAMESPACE) {
+                val n = children.item(i) ?: continue
+                if (n is Element && n.namespaceURI == W_NAMESPACE) {
                     if (n.localName == "r" || n.localName == "hyperlink") {
                         results += doc.importNode(n, true) as Element
                     }
@@ -228,9 +242,9 @@ internal object ParagraphInlineReplacer {
     private fun findRpr(run: Element): Element? {
         val children = run.childNodes
         for (i in 0 until children.length) {
-            val n = children.item(i)
-            if (n.nodeType == Node.ELEMENT_NODE && n.namespaceURI == W_NAMESPACE && n.localName == "rPr") {
-                return n as Element
+            val n = children.item(i) ?: continue
+            if (n is Element && n.namespaceURI == W_NAMESPACE && n.localName == "rPr") {
+                return n
             }
         }
         return null
@@ -244,7 +258,7 @@ internal object ParagraphInlineReplacer {
         //   <w:r><w:rPr>…src…</w:rPr><w:rPr>…patch…</w:rPr><w:t>…</w:t></w:r>
         val cloned = run.ownerDocument.importNode(sourceRpr, true)
         val firstChild = run.firstChild
-        if (firstChild != null) run.insertBefore(cloned, firstChild) else run.appendChild(cloned)
+        if (firstChild != null) insertBefore(run, cloned, firstChild) else run.appendChild(cloned)
     }
 
     /**
@@ -256,13 +270,18 @@ internal object ParagraphInlineReplacer {
     private fun cloneRunWithSourceAttrs(sourceRun: Element, text: String): Element {
         val doc = sourceRun.ownerDocument
         val newRun = doc.createElementNS(W_NAMESPACE, "w:r")
-        val attrs = sourceRun.attributes
-        for (i in 0 until attrs.length) {
-            val a = attrs.item(i) as org.w3c.dom.Attr
-            newRun.setAttributeNS(a.namespaceURI, a.name, a.value)
+        // NamedNodeMap is Iterable<Attr> in xmlutil's dom2; iterate
+        // directly rather than going through item(int) + length.
+        for (a in sourceRun.attributes) {
+            val ns = a.namespaceURI
+            if (!ns.isNullOrEmpty()) {
+                newRun.setAttributeNS(ns, a.name, a.value)
+            } else {
+                newRun.setAttribute(a.name, a.value)
+            }
         }
         val rPr = findRpr(sourceRun)
-        if (rPr != null) newRun.appendChild(rPr.cloneNode(true))
+        if (rPr != null) newRun.appendChild(cloneDeep(rPr))
         val tEl = doc.createElementNS(W_NAMESPACE, "w:t")
         tEl.setAttributeNS(io.docxkt.xml.Namespaces.XML_W3C, "xml:space", "preserve")
         tEl.appendChild(doc.createTextNode(text))

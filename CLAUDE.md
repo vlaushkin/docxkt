@@ -1,9 +1,9 @@
 # docxkt — Claude Code operational guide
 
-Kotlin/JVM port of [dolanmiu/docx](https://github.com/dolanmiu/docx),
+Kotlin Multiplatform port of [dolanmiu/docx](https://github.com/dolanmiu/docx),
 a TypeScript library for generating Microsoft Word `.docx` files.
-This file tells you **how to work** in this codebase. Public-facing
-description is in `README.md`.
+Targets JVM, Android, iOS, and macOS. This file tells you **how to
+work** in this codebase. Public-facing description is in `README.md`.
 
 ## Environment layout (inside container)
 
@@ -27,14 +27,33 @@ recreate them; the container is the ground truth.
 
 ## Architectural invariants (do not violate)
 
-- `:core` is **pure Kotlin/JVM**, stdlib-only at runtime. No
-  Android APIs, no Kotlin Multiplatform, no non-stdlib runtime
-  dependencies. Test deps are fine: JUnit 5, XMLUnit, kotlin.test.
-- `:patcher` is the only module allowed to use `javax.xml.parsers`
-  / `javax.xml.stream` / `org.w3c.dom`, and only on the read side
-  (parsing existing `.docx` ZIPs). Emission is still hand-rolled.
-- `:android` is a thin Android wrapper. Depends on `:core` via
-  `api(...)`. AndroidX Core is allowed; nothing else.
+- `:core` is **Kotlin Multiplatform** with targets `jvm`,
+  `androidTarget`, and the four Apple-Native targets (`iosX64`,
+  `iosArm64`, `iosSimulatorArm64`, `macosArm64`). Source-set tree:
+  `commonMain` → `jvmAndAndroidMain` (manual intermediate carrying
+  `java.util.zip` / `java.time` code) → `jvmMain` + `androidMain`;
+  separately `appleMain` → per-target Apple sets. `commonMain`
+  follows a **stdlib-first preference**: avoid non-stdlib runtime
+  dependencies wherever a per-platform stdlib (JDK on JVM/Android,
+  libz cinterop on Apple, `NSISO8601DateFormatter` on Apple) can
+  carry the load. The single accepted Kotlin runtime dep is
+  `kotlinx-io` for the cross-platform `Sink` in the public IO
+  surface. Test deps are unrestricted: JUnit 5 + XMLUnit on JVM,
+  `kotlin.test` on every target.
+- `:patcher` reads existing `.docx` ZIPs and hands the result back
+  to `:core`'s packager. Uses `pdvrieze/xmlutil` 1.0.0-rc2 for the
+  XML read/write pipeline; one `AttrSourceOrder` side-channel
+  preserves source-order namespace declarations on round-trip
+  (xmlutil's platform-DOM-backed reader on JVM otherwise alphabetises
+  `xmlns:*`). Stays JVM-only — KMP'ing it would require a
+  multiplatform ZIP read path and is a separate effort.
+- The Android conveniences (FileProvider helpers, MediaStore
+  saveToDownloads, share-intent builders) live in
+  `:core/src/androidMain/kotlin/io/docxkt/android/`. The previously
+  separate `:android` module was folded into `:core/androidMain`.
+  `androidx.core` is the only allowed AndroidX runtime dep, scoped
+  through `kotlin { sourceSets.androidMain.dependencies { ... } }`
+  so it doesn't bleed into other source sets.
 - **Every XML-producing class implements
   `appendXml(out: Appendable): Unit`** and writes its tag directly
   to the `Appendable`. No intermediate object tree (we
@@ -48,8 +67,8 @@ recreate them; the container is the ground truth.
 - Public API is a **DSL** with `@DslMarker`. Internal state is
   immutable data classes / sealed hierarchies.
 - No reflection, no annotation processing, no codegen in `:core`.
-  It must compile and run on a vanilla JVM with no setup beyond
-  Gradle.
+  Apple-target compilation requires a macOS host with Xcode (Kotlin/
+  Native limitation); JVM and Android targets compile on any host.
 - Namespace URIs and prefixes live as constants in
   `io.docxkt.xml.Namespaces` — single source of truth. Do not
   re-declare URIs inline.
@@ -71,7 +90,7 @@ by upstream. Loop:
    paragraphs.
 2. Run it inside the sandbox, unzip the output, and copy the
    relevant XML parts into
-   `core/src/test/resources/fixtures/<feature>/`. Do **not**
+   `core/src/jvmTest/resources/fixtures/<feature>/`. Do **not**
    commit parts the test does not assert against — it creates the
    illusion of coverage we don't have.
 3. Write the Kotlin equivalent via the `document { … }` DSL.
@@ -91,9 +110,9 @@ XML lands in the repo. Pin the upstream SHA in the fixture's
 
 ## Upstream attribution
 
-Every `.kt` file under `core/src/main/kotlin/io/docxkt/` whose
-contents port behaviour from dolanmiu/docx carries a comment on
-its primary declaration:
+Every `.kt` file under `core/src/commonMain/kotlin/io/docxkt/`
+(plus the per-target source sets) whose contents port behaviour
+from dolanmiu/docx carries a comment on its primary declaration:
 
 ```kotlin
 // Port of: src/file/paragraph/run/run.ts (L169-L223)
@@ -177,7 +196,9 @@ comment.
   a field, our model has it. If upstream emits an attribute, we
   do. If a feature in `/opt/docx-ref/src/` exists, we
   transliterate it.
-- Do not add dependencies to `:core` runtime. Stdlib only.
+- Do not add runtime dependencies to `:core` beyond the
+  stdlib-first gradient (per-platform stdlib first, `kotlinx-io`
+  for the public Sink type only). Test deps are unrestricted.
 - Do not "clean up" unfamiliar files in `/workspace`. If a file
   looks weird and isn't obviously yours, leave it alone.
 - Do not run `rm -rf` with unquoted globs or interpolated paths.
@@ -187,14 +208,17 @@ comment.
 
 ## Conventions recap
 
-- Kotlin 2.3.20, JVM toolchain 21, `explicitApi()` enabled in
+- Kotlin 2.3.21, JVM toolchain 21, `explicitApi()` enabled in
   `:core` and `:patcher`.
-- AGP 8.13.x, `minSdk 23`, `compileSdk 36` for `:android`.
-- Test framework: JUnit 5 via `useJUnitPlatform()`.
-- XML diffing: XMLUnit (`xmlunit-core`, `xmlunit-matchers`).
+- AGP 8.13.x for the Android target inside `:core`. `minSdk 23`,
+  `compileSdk 36`.
+- Test framework: JUnit 5 (`useJUnitPlatform()`) on JVM,
+  `kotlin.test` everywhere else.
+- XML diffing: XMLUnit (`xmlunit-core`, `xmlunit-matchers`),
+  JVM-only.
 - Package root: `io.docxkt`.
-- Fixture path: `core/src/test/resources/fixtures/<feature>/`
-  (and `patcher/src/test/resources/fixtures/<feature>/`).
+- Fixture paths: `core/src/jvmTest/resources/fixtures/<feature>/`
+  and `patcher/src/test/resources/fixtures/<feature>/`.
 - Serialize method: `appendXml(out: Appendable): Unit`. No
   intermediate tree. Always write through `XmlEscape`,
   `Elements`, and `Namespaces` constants.

@@ -2,6 +2,7 @@
 // + images) and Table-at-top-level snippets.
 package io.docxkt.patcher
 
+import io.docxkt.pack.toByteArray
 import io.docxkt.api.paragraphs
 import io.docxkt.model.drawing.ImageFormat
 import io.docxkt.pack.DocxPackager

@@ -2,6 +2,7 @@
 package io.docxkt.patcher
 
 import io.docxkt.pack.DocxPackager
+import io.docxkt.pack.toByteArray
 import io.docxkt.patcher.io.DocxReader
 import io.docxkt.patcher.io.OoxmlParser
 import io.docxkt.patcher.io.OoxmlWriter
@@ -10,7 +11,8 @@ import io.docxkt.patcher.replace.ParagraphInjector
 import io.docxkt.patcher.replace.PatchOptions
 import io.docxkt.patcher.replace.RowInjector
 import io.docxkt.patcher.replace.TokenReplacer
-import org.w3c.dom.Document
+import nl.adaptivity.xmlutil.dom2.Document
+import nl.adaptivity.xmlutil.dom2.documentElement
 
 /**
  * Top-level patcher entry point.
@@ -542,14 +544,17 @@ public object PatchDocument {
      *  2. Append `" w15"` to `mc:Ignorable` (or initialise it to
      *     `"w15"` when missing). Upstream does this unconditionally,
      *     producing the trailing duplicate seen in real templates.
+     *
+     * Mutations propagate to [io.docxkt.patcher.io.AttrSourceOrder]
+     * so the writer emits canonical entries in their existing slot
+     * (or appends them) rather than alongside the platform DOM's
+     * alphabetised xmlns:* iteration order.
      */
     private fun ensureDocumentNamespaces(doc: Document) {
         val root = doc.documentElement ?: return
-        @Suppress("UNCHECKED_CAST")
-        val orderList = (root.getUserData(io.docxkt.patcher.io.SOURCE_ATTR_ORDER_KEY)
-            as? List<Pair<String, String>>)
-            ?.toMutableList()
-            ?: mutableListOf()
+        val orderList =
+            io.docxkt.patcher.io.AttrSourceOrder.get(root)?.toMutableList()
+                ?: mutableListOf()
 
         val canonicalNs = listOf(
             "mc" to io.docxkt.xml.Namespaces.MARKUP_COMPATIBILITY,
@@ -568,7 +573,7 @@ public object PatchDocument {
                 orderList += attrName to uri
             }
         }
-        val existing = root.getAttribute("mc:Ignorable")
+        val existing = root.getAttribute("mc:Ignorable") ?: ""
         val updated = (if (existing.isEmpty()) "w15" else "$existing w15").trim()
         root.setAttribute("mc:Ignorable", updated)
         val mcIdx = orderList.indexOfFirst { it.first == "mc:Ignorable" }
@@ -577,6 +582,6 @@ public object PatchDocument {
         } else {
             orderList += "mc:Ignorable" to updated
         }
-        root.setUserData(io.docxkt.patcher.io.SOURCE_ATTR_ORDER_KEY, orderList, null)
+        io.docxkt.patcher.io.AttrSourceOrder.put(root, orderList)
     }
 }

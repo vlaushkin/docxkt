@@ -1,6 +1,7 @@
 // No upstream analogue — DocxReader behavioural tests.
 package io.docxkt.patcher.io
 
+import io.docxkt.pack.toByteArray
 import io.docxkt.pack.DocxPackager
 import org.junit.jupiter.api.Test
 import kotlin.test.assertContentEquals

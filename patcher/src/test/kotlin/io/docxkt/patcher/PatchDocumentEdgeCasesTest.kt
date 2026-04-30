@@ -2,6 +2,7 @@
 // don't fit a fixture pair.
 package io.docxkt.patcher
 
+import io.docxkt.pack.toByteArray
 import io.docxkt.pack.DocxPackager
 import io.docxkt.patcher.io.DocxReader
 import io.docxkt.patcher.io.OoxmlParser

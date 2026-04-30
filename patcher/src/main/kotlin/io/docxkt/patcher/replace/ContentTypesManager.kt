@@ -2,9 +2,12 @@
 package io.docxkt.patcher.replace
 
 import io.docxkt.xml.Namespaces
-import org.w3c.dom.Document
-import org.w3c.dom.Element
-import org.w3c.dom.Node
+import nl.adaptivity.xmlutil.dom2.Document
+import nl.adaptivity.xmlutil.dom2.Element
+import nl.adaptivity.xmlutil.dom2.childNodes
+import nl.adaptivity.xmlutil.dom2.documentElement
+import nl.adaptivity.xmlutil.dom2.length
+import nl.adaptivity.xmlutil.dom2.localName
 
 /**
  * Manipulates `[Content_Types].xml` — the part-list manifest. The
@@ -22,17 +25,16 @@ internal object ContentTypesManager {
      * already present. Dedupe key: `(extension, contentType)` pair.
      */
     fun addDefaultExtension(doc: Document, extension: String, contentType: String) {
-        val root = doc.documentElement
+        val root = doc.documentElement!!
         // Walk existing <Default> children; bail if a matching one
         // already exists.
         val children = root.childNodes
         for (i in 0 until children.length) {
-            val n = children.item(i)
-            if (n.nodeType != Node.ELEMENT_NODE) continue
-            val e = n as Element
-            if (e.localName == "Default" &&
-                e.getAttribute("Extension") == extension &&
-                e.getAttribute("ContentType") == contentType
+            val n = children.item(i) ?: continue
+            if (n !is Element) continue
+            if (n.localName == "Default" &&
+                n.getAttribute("Extension") == extension &&
+                n.getAttribute("ContentType") == contentType
             ) {
                 return  // already present
             }

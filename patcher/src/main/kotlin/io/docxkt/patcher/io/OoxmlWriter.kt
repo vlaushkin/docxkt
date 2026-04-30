@@ -1,25 +1,46 @@
 // Port of: src/patcher/from-docx.ts (XML output via xml-js's js2xml).
-// Hand-rolled DOM walker so we preserve source-order xmlns
-// attributes, retain `xml:space="preserve"`, and emit self-closing
-// `<x/>` (matches upstream's xml-js style).
+// Hand-walks the parsed `dom2.Document` and emits each element via
+// `StringBuilder`, consulting [AttrSourceOrder] for namespace
+// declaration / attribute source order. xmlutil's `DomReader`
+// alphabetises `xmlns:*` declarations (it inherits the platform
+// DOM's NamedNodeMap iteration order), and its `KtXmlWriter`
+// rejects xmlns decls that conflict with what `startTag` has
+// already auto-bound — both behaviours break the byte-equal
+// round-trip the patcher fixture battery relies on. We therefore
+// bypass xmlutil's writer entirely on the emission path.
 package io.docxkt.patcher.io
 
-import org.w3c.dom.Attr
-import org.w3c.dom.Document
-import org.w3c.dom.Element
-import org.w3c.dom.Node
+import nl.adaptivity.xmlutil.dom2.CDATASection
+import nl.adaptivity.xmlutil.dom2.Comment
+import nl.adaptivity.xmlutil.dom2.Document
+import nl.adaptivity.xmlutil.dom2.Element
+import nl.adaptivity.xmlutil.dom2.ProcessingInstruction
+import nl.adaptivity.xmlutil.dom2.Text
+import nl.adaptivity.xmlutil.dom2.attributes
+import nl.adaptivity.xmlutil.dom2.childNodes
+import nl.adaptivity.xmlutil.dom2.data
+import nl.adaptivity.xmlutil.dom2.documentElement
+import nl.adaptivity.xmlutil.dom2.length
+import nl.adaptivity.xmlutil.dom2.localName
+import nl.adaptivity.xmlutil.dom2.name
+import nl.adaptivity.xmlutil.dom2.prefix
+import nl.adaptivity.xmlutil.dom2.target
+import nl.adaptivity.xmlutil.dom2.value
 
 /**
- * Serializes a `org.w3c.dom.Document` back to XML bytes.
+ * Serializes an xmlutil [Document] back to XML bytes.
  *
  * Output configuration:
  * - UTF-8 encoding.
- * - `standalone="yes"` — matches upstream's prelude for OOXML
- *   parts.
+ * - `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`
+ *   prelude unconditionally (matches upstream's OOXML-part
+ *   header).
  * - Single-line output (no pretty-printing).
- * - Attributes emitted in NamedNodeMap iteration order, which the
- *   JDK preserves from the parse if the element wasn't modified.
- * - Empty elements emit `<x/>`, not `<x></x>` — matches xml-js.
+ * - Empty elements emit `<x/>` — matches xml-js / upstream.
+ * - Attributes emitted in [AttrSourceOrder] order when present
+ *   (parser-stashed source order); else NamedNodeMap iteration
+ *   order (only happens for elements created post-parse, where
+ *   the XMLUnit byNameAndAllAttributes diff is order-insensitive).
  */
 internal object OoxmlWriter {
 
@@ -33,33 +54,9 @@ internal object OoxmlWriter {
     }
 
     private fun writeElement(element: Element, sb: StringBuilder) {
-        sb.append('<').append(element.tagName)
-        // Prefer the parser-stashed source order. The DOM
-        // NamedNodeMap alphabetises `xmlns:*` declarations, which
-        // breaks byte-equal round-trip. When the element was created
-        // post-parse (no user data), fall through to NamedNodeMap.
-        @Suppress("UNCHECKED_CAST")
-        val sourceOrder = element.getUserData(SOURCE_ATTR_ORDER_KEY)
-            as? List<Pair<String, String>>
-        if (sourceOrder != null && sourceOrder.size == element.attributes.length) {
-            for ((name, value) in sourceOrder) {
-                sb.append(' ').append(name).append('=').append('"')
-                sb.append(escapeAttr(value))
-                sb.append('"')
-            }
-        } else {
-            val attrs = element.attributes
-            for (i in 0 until attrs.length) {
-                val a = attrs.item(i) as Attr
-                sb.append(' ').append(a.name).append('=').append('"')
-                sb.append(escapeAttr(a.value))
-                sb.append('"')
-            }
-        }
-        // Empty element → self-close, except <w:t> with xml:space="preserve"
-        // — that one Word treats specially (stripping the empty text
-        // would lose the explicit-empty signal). For consistency with
-        // upstream, self-close any element with NO children regardless.
+        val tagName = qname(element)
+        sb.append('<').append(tagName)
+        emitAttributes(element, sb)
         val children = element.childNodes
         if (children.length == 0) {
             sb.append("/>")
@@ -67,28 +64,73 @@ internal object OoxmlWriter {
         }
         sb.append('>')
         for (i in 0 until children.length) {
-            val n = children.item(i)
-            when (n.nodeType) {
-                Node.ELEMENT_NODE -> writeElement(n as Element, sb)
-                Node.TEXT_NODE -> sb.append(escapeText((n as org.w3c.dom.Text).data))
-                Node.CDATA_SECTION_NODE -> {
-                    sb.append("<![CDATA[")
-                    sb.append((n as org.w3c.dom.CDATASection).data)
-                    sb.append("]]>")
+            when (val c = children.item(i) ?: continue) {
+                is Element -> writeElement(c, sb)
+                is CDATASection -> sb.append("<![CDATA[").append(c.data).append("]]>")
+                is Text -> sb.append(escapeText(c.data))
+                is Comment -> sb.append("<!--").append(c.data).append("-->")
+                is ProcessingInstruction -> {
+                    sb.append("<?").append(c.target)
+                    val data = c.data
+                    if (!data.isNullOrEmpty()) sb.append(' ').append(data)
+                    sb.append("?>")
                 }
-                Node.COMMENT_NODE -> {
-                    sb.append("<!--")
-                    sb.append((n as org.w3c.dom.Comment).data)
-                    sb.append("-->")
-                }
-                Node.PROCESSING_INSTRUCTION_NODE -> {
-                    val pi = n as org.w3c.dom.ProcessingInstruction
-                    sb.append("<?").append(pi.target).append(' ').append(pi.data).append("?>")
-                }
-                // Skip everything else (entity references etc.)
+                else -> { /* skip unknown node types */ }
             }
         }
-        sb.append("</").append(element.tagName).append('>')
+        sb.append("</").append(tagName).append('>')
+    }
+
+    private fun emitAttributes(element: Element, sb: StringBuilder) {
+        val sourceOrder = AttrSourceOrder.get(element)
+        if (sourceOrder == null) {
+            for (attr in element.attributes) {
+                appendAttr(sb, attr.name, attr.value)
+            }
+            return
+        }
+        // Merge: emit each AttrSourceOrder entry in source order,
+        // sourcing the current value from the DOM (so post-parse
+        // mutations like xml:space propagation see their effect).
+        // Then append any DOM attributes not in the source-order
+        // list. This fallback path is what catches the
+        // setAttributeNS calls the replacers perform after parse.
+        val emittedNames = HashSet<String>()
+        for ((name, _) in sourceOrder) {
+            val current = currentAttributeValue(element, name)
+            if (current != null) {
+                appendAttr(sb, name, current)
+                emittedNames += name
+            }
+        }
+        for (attr in element.attributes) {
+            if (attr.name in emittedNames) continue
+            appendAttr(sb, attr.name, attr.value)
+        }
+    }
+
+    private fun appendAttr(sb: StringBuilder, name: String, value: String) {
+        sb.append(' ').append(name).append('=').append('"')
+        sb.append(escapeAttr(value))
+        sb.append('"')
+    }
+
+    /**
+     * Look up [name]'s current value on [element]. Iterates the
+     * NamedNodeMap because `getAttribute` collapses unset to ""
+     * (which would mask deletions).
+     */
+    private fun currentAttributeValue(element: Element, name: String): String? {
+        for (attr in element.attributes) {
+            if (attr.name == name) return attr.value
+        }
+        return null
+    }
+
+    private fun qname(element: Element): String {
+        val pre = element.prefix.orEmpty()
+        val local = element.localName.orEmpty()
+        return if (pre.isEmpty()) local else "$pre:$local"
     }
 
     private fun escapeAttr(value: String): String {

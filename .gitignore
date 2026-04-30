@@ -26,3 +26,12 @@ local.properties
 
 # Claude Code per-repo state (keep CLAUDE.md, not the .claude/ dir)
 .claude/
+
+# Local research artifacts (audit reports, scratch notes).
+.audit/
+
+# Swift Package Manager build artifacts.
+.build/
+.swiftpm/
+Packages/
+**/xcuserdata/

@@ -4,9 +4,13 @@ package io.docxkt.patcher.replace
 
 import io.docxkt.api.runs
 import io.docxkt.patcher.Patch
-import org.w3c.dom.Document
-import org.w3c.dom.Element
-import org.w3c.dom.Node
+import nl.adaptivity.xmlutil.dom2.Document
+import nl.adaptivity.xmlutil.dom2.Element
+import nl.adaptivity.xmlutil.dom2.data
+import nl.adaptivity.xmlutil.dom2.documentElement
+import nl.adaptivity.xmlutil.dom2.length
+import nl.adaptivity.xmlutil.dom2.ownerDocument
+import nl.adaptivity.xmlutil.dom2.parentNode
 
 /**
  * Image-injection pass.
@@ -102,7 +106,8 @@ internal object ImageInjector {
         rid: Int,
         imageIdx: Int,
     ): ApplyResult? {
-        val paragraphs = doc.getElementsByTagNameNS(W_NAMESPACE, "p")
+        val root = doc.documentElement!!
+        val paragraphs = root.getElementsByTagNameNS(W_NAMESPACE, "p")
         val pList = (0 until paragraphs.length).map { paragraphs.item(it) as Element }
         for (paragraph in pList) {
             val rendered = renderParagraph(paragraph)
@@ -151,7 +156,7 @@ internal object ImageInjector {
 
         val firstRun = ancestorRun(first.textNode)
             ?: error("First marker text node has no <w:r> ancestor")
-        val parent = firstRun.parentNode
+        val parent = firstRun.parentNode!!
 
         // 1. Mutate the first <w:t>'s data to be just the prefix
         //    text. If prefix is empty, the run still works but

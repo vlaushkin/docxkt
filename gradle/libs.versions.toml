@@ -1,8 +1,14 @@
 [versions]
-kotlin = "2.3.20"
+kotlin = "2.3.21"
 junit = "5.11.3"
 junit-platform = "1.11.3"
 xmlunit = "2.10.0"
+xmlutil = "1.0.0-rc2"
+# Single non-stdlib runtime dep accepted in :core. Only used for the
+# public Sink type on Document.writeTo(sink). Internal codec/framer
+# code stays on per-platform stdlib (java.util.zip on JVM/Android, libz
+# cinterop on Apple).
+kotlinx-io = "0.9.0"
 # Android Gradle Plugin — bumped alongside Kotlin 2.3.x, which requires
 # AGP 8.8+ for its embedded Kotlin compiler classpath. compileSdk = 36
 # supported from AGP 8.6.
@@ -22,6 +28,8 @@ junit-jupiter-params = { group = "org.junit.jupiter", name = "junit-jupiter-para
 junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version.ref = "junit-platform" }
 xmlunit-core = { group = "org.xmlunit", name = "xmlunit-core", version.ref = "xmlunit" }
 xmlunit-matchers = { group = "org.xmlunit", name = "xmlunit-matchers", version.ref = "xmlunit" }
+xmlutil-core = { group = "io.github.pdvrieze.xmlutil", name = "core", version.ref = "xmlutil" }
+kotlinx-io-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-io-core", version.ref = "kotlinx-io" }
 kotlin-test = { group = "org.jetbrains.kotlin", name = "kotlin-test" }
 androidx-core = { group = "androidx.core", name = "core", version.ref = "androidx-core" }
 androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidx-test-runner" }
@@ -30,6 +38,7 @@ androidx-activity = { group = "androidx.activity", name = "activity", version.re
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 android-library = { id = "com.android.library", version.ref = "agp" }
 android-application = { id = "com.android.application", version.ref = "agp" }

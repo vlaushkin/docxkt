@@ -4,6 +4,7 @@
 package io.docxkt.patcher.testing
 
 import io.docxkt.pack.DocxPackager
+import io.docxkt.pack.toByteArray
 import io.docxkt.patcher.Patch
 import io.docxkt.patcher.PatchDocument
 import org.junit.jupiter.api.DynamicTest

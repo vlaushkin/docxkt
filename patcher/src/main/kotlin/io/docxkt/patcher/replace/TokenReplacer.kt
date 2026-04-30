@@ -4,9 +4,13 @@
 package io.docxkt.patcher.replace
 
 import io.docxkt.patcher.Patch
-import org.w3c.dom.Document
-import org.w3c.dom.Element
-import org.w3c.dom.Node
+import nl.adaptivity.xmlutil.dom2.Document
+import nl.adaptivity.xmlutil.dom2.Element
+import nl.adaptivity.xmlutil.dom2.data
+import nl.adaptivity.xmlutil.dom2.documentElement
+import nl.adaptivity.xmlutil.dom2.length
+import nl.adaptivity.xmlutil.dom2.ownerDocument
+import nl.adaptivity.xmlutil.dom2.parentNode
 
 /**
  * Token-replacement pass over a parsed `word/document.xml` DOM.
@@ -76,7 +80,8 @@ internal object TokenReplacer {
         markerRegex: Regex,
         keepOriginalStyles: Boolean,
     ): String? {
-        val paragraphs = doc.getElementsByTagNameNS(W_NAMESPACE, "p")
+        val root = doc.documentElement!!
+        val paragraphs = root.getElementsByTagNameNS(W_NAMESPACE, "p")
         val paragraphList = (0 until paragraphs.length).map { paragraphs.item(it) as Element }
 
         for (paragraph in paragraphList) {

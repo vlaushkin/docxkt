@@ -2,6 +2,7 @@
 // patcher's stateless contract.
 package io.docxkt.patcher
 
+import io.docxkt.pack.toByteArray
 import io.docxkt.pack.DocxPackager
 import org.xmlunit.builder.DiffBuilder
 import org.xmlunit.builder.Input

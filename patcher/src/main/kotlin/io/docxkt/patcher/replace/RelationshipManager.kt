@@ -2,9 +2,12 @@
 package io.docxkt.patcher.replace
 
 import io.docxkt.xml.Namespaces
-import org.w3c.dom.Document
-import org.w3c.dom.Element
-import org.w3c.dom.Node
+import nl.adaptivity.xmlutil.dom2.Document
+import nl.adaptivity.xmlutil.dom2.Element
+import nl.adaptivity.xmlutil.dom2.childNodes
+import nl.adaptivity.xmlutil.dom2.documentElement
+import nl.adaptivity.xmlutil.dom2.length
+import nl.adaptivity.xmlutil.dom2.localName
 
 /**
  * Manipulates `word/_rels/document.xml.rels` (or any Relationships
@@ -25,15 +28,14 @@ internal object RelationshipManager {
      * `N + 1`. Returns 1 if no relationships exist.
      */
     fun nextRid(doc: Document): Int {
-        val root = doc.documentElement
+        val root = doc.documentElement!!
         val children = root.childNodes
         var maxId = 0
         for (i in 0 until children.length) {
-            val n = children.item(i)
-            if (n.nodeType != Node.ELEMENT_NODE) continue
-            val e = n as Element
-            if (e.localName == "Relationship") {
-                val id = e.getAttribute("Id")
+            val n = children.item(i) ?: continue
+            if (n !is Element) continue
+            if (n.localName == "Relationship") {
+                val id = n.getAttribute("Id") ?: continue
                 if (id.startsWith("rId")) {
                     val numStr = id.substring(3)
                     val num = numStr.toIntOrNull() ?: continue
@@ -56,7 +58,7 @@ internal object RelationshipManager {
         target: String,
         targetMode: String? = null,
     ) {
-        val root = doc.documentElement
+        val root = doc.documentElement!!
         val rel = doc.createElementNS(Namespaces.PACKAGE_RELATIONSHIPS_NAMESPACE, "Relationship")
         rel.setAttribute("Id", "rId$id")
         rel.setAttribute("Type", type)
@@ -70,16 +72,15 @@ internal object RelationshipManager {
      * return the highest N seen (0 if none).
      */
     fun maxImageMediaIndex(doc: Document): Int {
-        val root = doc.documentElement
+        val root = doc.documentElement!!
         val children = root.childNodes
         var maxIdx = 0
         val regex = Regex("""media/image(\d+)\.""")
         for (i in 0 until children.length) {
-            val n = children.item(i)
-            if (n.nodeType != Node.ELEMENT_NODE) continue
-            val e = n as Element
-            if (e.localName == "Relationship") {
-                val target = e.getAttribute("Target")
+            val n = children.item(i) ?: continue
+            if (n !is Element) continue
+            if (n.localName == "Relationship") {
+                val target = n.getAttribute("Target") ?: continue
                 regex.find(target)?.let {
                     val num = it.groupValues[1].toIntOrNull() ?: return@let
                     if (num > maxIdx) maxIdx = num

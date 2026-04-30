@@ -4,9 +4,16 @@
 package io.docxkt.patcher.replace
 
 import io.docxkt.patcher.Patch
-import org.w3c.dom.Document
-import org.w3c.dom.Element
-import org.w3c.dom.Node
+import nl.adaptivity.xmlutil.dom2.Document
+import nl.adaptivity.xmlutil.dom2.Element
+import nl.adaptivity.xmlutil.dom2.Node
+import nl.adaptivity.xmlutil.dom2.childNodes
+import nl.adaptivity.xmlutil.dom2.data
+import nl.adaptivity.xmlutil.dom2.documentElement
+import nl.adaptivity.xmlutil.dom2.length
+import nl.adaptivity.xmlutil.dom2.localName
+import nl.adaptivity.xmlutil.dom2.namespaceURI
+import nl.adaptivity.xmlutil.dom2.parentNode
 
 /**
  * Paragraph-injection pass over a parsed `word/document.xml` DOM.
@@ -56,7 +63,8 @@ internal object ParagraphInjector {
     }
 
     private fun injectOne(doc: Document, patches: Map<String, Patch.Paragraphs>, markerRegex: Regex): String? {
-        val paragraphs = doc.getElementsByTagNameNS(W_NAMESPACE, "p")
+        val root = doc.documentElement!!
+        val paragraphs = root.getElementsByTagNameNS(W_NAMESPACE, "p")
         val paragraphList = (0 until paragraphs.length).map { paragraphs.item(it) as Element }
 
         for (paragraph in paragraphList) {
@@ -96,7 +104,7 @@ internal object ParagraphInjector {
         if (isWholeParagraph) {
             // Splice <w:p> out, insert new paragraphs before its old position.
             for (np in newParagraphs) {
-                parent.insertBefore(np, paragraph)
+                insertBefore(parent, np, paragraph)
             }
             parent.removeChild(paragraph)
         } else {
@@ -104,9 +112,9 @@ internal object ParagraphInjector {
             val (before, after) = splitParagraph(paragraph, doc, rendered, markerStart, markerEnd)
             // Insert: before, ...newParagraphs, after; then remove
             // the original.
-            parent.insertBefore(before, paragraph)
-            for (np in newParagraphs) parent.insertBefore(np, paragraph)
-            parent.insertBefore(after, paragraph)
+            insertBefore(parent, before, paragraph)
+            for (np in newParagraphs) insertBefore(parent, np, paragraph)
+            insertBefore(parent, after, paragraph)
             parent.removeChild(paragraph)
         }
         return key
@@ -144,10 +152,10 @@ internal object ParagraphInjector {
         markerEnd: Int,
     ): Pair<Element, Element> {
         // BEFORE half: everything up to markerStart.
-        val before = paragraph.cloneNode(/* deep = */ true) as Element
+        val before = cloneDeep(paragraph) as Element
         truncateParagraph(before, /* keepStart = */ 0, /* keepEndExclusive = */ markerStart)
         // AFTER half: everything after markerEnd.
-        val after = paragraph.cloneNode(/* deep = */ true) as Element
+        val after = cloneDeep(paragraph) as Element
         truncateParagraph(after, /* keepStart = */ markerEnd + 1, /* keepEndExclusive = */ rendered.text.length)
         return before to after
     }
@@ -212,13 +220,14 @@ internal object ParagraphInjector {
     }
 
     private fun collectTextElements(node: Node, out: MutableList<Element>) {
-        if (node.nodeType == Node.ELEMENT_NODE && node.namespaceURI == W_NAMESPACE && node.localName == "t") {
-            out += node as Element
+        if (node is Element && node.namespaceURI == W_NAMESPACE && node.localName == "t") {
+            out += node
             return
         }
         val children = node.childNodes
         for (i in 0 until children.length) {
-            collectTextElements(children.item(i), out)
+            val n = children.item(i) ?: continue
+            collectTextElements(n, out)
         }
     }
 
@@ -226,9 +235,9 @@ internal object ParagraphInjector {
         val result = mutableListOf<Element>()
         val children = parent.childNodes
         for (i in 0 until children.length) {
-            val n = children.item(i)
-            if (n.nodeType == Node.ELEMENT_NODE && n.namespaceURI == ns && n.localName == local) {
-                result += n as Element
+            val n = children.item(i) ?: continue
+            if (n is Element && n.namespaceURI == ns && n.localName == local) {
+                result += n
             }
         }
         return result

@@ -6,6 +6,7 @@
 // `<Default Extension>` entry on `[Content_Types].xml`.
 package io.docxkt.patcher
 
+import io.docxkt.pack.toByteArray
 import io.docxkt.api.runs
 import io.docxkt.model.drawing.ImageFormat
 import io.docxkt.pack.DocxPackager

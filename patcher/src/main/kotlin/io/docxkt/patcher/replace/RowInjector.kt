@@ -4,9 +4,14 @@
 package io.docxkt.patcher.replace
 
 import io.docxkt.patcher.Patch
-import org.w3c.dom.Document
-import org.w3c.dom.Element
-import org.w3c.dom.Node
+import nl.adaptivity.xmlutil.dom2.Document
+import nl.adaptivity.xmlutil.dom2.Element
+import nl.adaptivity.xmlutil.dom2.Node
+import nl.adaptivity.xmlutil.dom2.documentElement
+import nl.adaptivity.xmlutil.dom2.length
+import nl.adaptivity.xmlutil.dom2.localName
+import nl.adaptivity.xmlutil.dom2.namespaceURI
+import nl.adaptivity.xmlutil.dom2.parentNode
 
 /**
  * Row-injection pass. For each marker matching a registered
@@ -41,7 +46,8 @@ internal object RowInjector {
 
     private fun applyOne(doc: Document, patches: Map<String, Patch.Rows>, markerRegex: Regex): String? {
         // Walk text nodes inside <w:t> via paragraph traversal.
-        val paragraphs = doc.getElementsByTagNameNS(W_NAMESPACE, "p")
+        val root = doc.documentElement!!
+        val paragraphs = root.getElementsByTagNameNS(W_NAMESPACE, "p")
         for (i in 0 until paragraphs.length) {
             val p = paragraphs.item(i) as Element
             val containingRow = ancestorRow(p) ?: continue
@@ -55,7 +61,7 @@ internal object RowInjector {
                 ParagraphSnippetParser.parseAndImportRow(it, doc)
             }
             for (newRow in newRows) {
-                parent.insertBefore(newRow, containingRow)
+                insertBefore(parent, newRow, containingRow)
             }
             parent.removeChild(containingRow)
             return key
@@ -67,11 +73,11 @@ internal object RowInjector {
     private fun ancestorRow(node: Node): Element? {
         var current: Node? = node
         while (current != null) {
-            if (current.nodeType == Node.ELEMENT_NODE &&
+            if (current is Element &&
                 current.namespaceURI == W_NAMESPACE &&
                 current.localName == "tr"
             ) {
-                return current as Element
+                return current
             }
             current = current.parentNode
         }

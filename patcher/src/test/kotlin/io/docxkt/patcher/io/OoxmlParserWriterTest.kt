@@ -2,12 +2,16 @@
 // behavioural tests.
 package io.docxkt.patcher.io
 
+import nl.adaptivity.xmlutil.dom2.Text
+import nl.adaptivity.xmlutil.dom2.data
+import nl.adaptivity.xmlutil.dom2.documentElement
+import nl.adaptivity.xmlutil.dom2.firstChild
+import nl.adaptivity.xmlutil.dom2.localName
+import nl.adaptivity.xmlutil.dom2.namespaceURI
+import nl.adaptivity.xmlutil.dom2.textContent
 import org.junit.jupiter.api.Test
-import org.w3c.dom.Element
-import org.xml.sax.SAXParseException
 import kotlin.test.assertEquals
 import kotlin.test.assertFails
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 internal class OoxmlParserTest {
@@ -15,7 +19,7 @@ internal class OoxmlParserTest {
     @Test fun `parses basic OOXML namespace-aware`() {
         val xml = """<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body/></w:document>"""
         val doc = OoxmlParser.parse(xml.toByteArray())
-        val root = doc.documentElement
+        val root = doc.documentElement!!
         assertEquals("http://schemas.openxmlformats.org/wordprocessingml/2006/main", root.namespaceURI)
         assertEquals("document", root.localName)
     }
@@ -23,13 +27,12 @@ internal class OoxmlParserTest {
     @Test fun `parses element with attributes`() {
         val xml = """<?xml version="1.0"?><w:p xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:rsidR="00000000"><w:t>hi</w:t></w:p>"""
         val doc = OoxmlParser.parse(xml.toByteArray())
-        val root = doc.documentElement
-        // namespaceURI handles the qualified attribute correctly.
+        val root = doc.documentElement!!
         assertEquals("00000000", root.getAttribute("w:rsidR"))
     }
 
     @Test fun `XXE - DOCTYPE declaration is rejected`() {
-        // Hardening: disallow-doctype-decl is enabled.
+        // Hardening: DOCDECL events are surfaced as hard errors.
         val xml = """<?xml version="1.0"?><!DOCTYPE foo SYSTEM "http://example.com/foo.dtd"><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>"""
         assertFails { OoxmlParser.parse(xml.toByteArray()) }
     }
@@ -42,24 +45,20 @@ internal class OoxmlParserTest {
     @Test fun `parser preserves text content`() {
         val xml = """<?xml version="1.0"?><w:t xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">Hello, world!</w:t>"""
         val doc = OoxmlParser.parse(xml.toByteArray())
-        assertEquals("Hello, world!", doc.documentElement.textContent)
+        assertEquals("Hello, world!", doc.documentElement!!.textContent)
     }
 
     @Test fun `parser preserves entity-decoded characters`() {
         val xml = """<?xml version="1.0"?><w:t xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">a &amp; b</w:t>"""
         val doc = OoxmlParser.parse(xml.toByteArray())
         // Decoded to literal & in the DOM.
-        assertEquals("a & b", doc.documentElement.textContent)
+        assertEquals("a & b", doc.documentElement!!.textContent)
     }
 }
 
 internal class OoxmlWriterTest {
 
     @Test fun `serialize emits XML declaration prelude`() {
-        // JAXP's Transformer behavior: standalone="yes" property is
-        // only honoured when the source document had one. We don't
-        // assert on standalone presence — just on the version and
-        // encoding fields.
         val xml = """<?xml version="1.0"?><w:t xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">x</w:t>"""
         val doc = OoxmlParser.parse(xml.toByteArray())
         val out = OoxmlWriter.serialize(doc).toString(Charsets.UTF_8)
@@ -67,7 +66,6 @@ internal class OoxmlWriterTest {
     }
 
     @Test fun `serialize honours standalone yes when source has it`() {
-        // When the source declares standalone="yes", JAXP propagates.
         val xml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:t xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">x</w:t>"""
         val doc = OoxmlParser.parse(xml.toByteArray())
         val out = OoxmlWriter.serialize(doc).toString(Charsets.UTF_8)
@@ -84,7 +82,7 @@ internal class OoxmlWriterTest {
     @Test fun `serialize after mutating Text node value`() {
         val xml = """<?xml version="1.0"?><w:t xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">old</w:t>"""
         val doc = OoxmlParser.parse(xml.toByteArray())
-        val text = doc.documentElement.firstChild as org.w3c.dom.Text
+        val text = doc.documentElement!!.firstChild as Text
         text.data = "new"
         val out = OoxmlWriter.serialize(doc).toString(Charsets.UTF_8)
         assertTrue(">new<" in out)

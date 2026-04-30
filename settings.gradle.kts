@@ -16,4 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "docxkt"
 
-include(":core", ":patcher", ":android", ":sample-android")
+include(":core", ":patcher", ":sample-android")

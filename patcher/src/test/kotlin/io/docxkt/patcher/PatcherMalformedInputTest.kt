@@ -2,6 +2,7 @@
 // patcher's user-supplied ZIP intake.
 package io.docxkt.patcher
 
+import io.docxkt.pack.toByteArray
 import io.docxkt.model.drawing.ImageFormat
 import io.docxkt.pack.DocxPackager
 import java.util.zip.ZipInputStream

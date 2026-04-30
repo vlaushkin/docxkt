@@ -7,9 +7,13 @@ package io.docxkt.patcher.replace
 
 import io.docxkt.patcher.io.OoxmlParser
 import io.docxkt.xml.Namespaces
-import org.w3c.dom.Document
-import org.w3c.dom.Element
-import org.w3c.dom.Node
+import nl.adaptivity.xmlutil.dom2.Document
+import nl.adaptivity.xmlutil.dom2.Element
+import nl.adaptivity.xmlutil.dom2.childNodes
+import nl.adaptivity.xmlutil.dom2.documentElement
+import nl.adaptivity.xmlutil.dom2.length
+import nl.adaptivity.xmlutil.dom2.localName
+import nl.adaptivity.xmlutil.dom2.namespaceURI
 
 /**
  * Parses one of [io.docxkt.api.ParagraphSnippets.toXml] strings
@@ -48,11 +52,11 @@ internal object ParagraphSnippetParser {
     fun parseAndImportBlock(snippetXml: String, target: Document): Element {
         val envelopedXml = """<?xml version="1.0" encoding="UTF-8"?><w:document $ENVELOPE_NAMESPACES>$snippetXml</w:document>"""
         val parsed = OoxmlParser.parse(envelopedXml.toByteArray(Charsets.UTF_8))
-        val root = parsed.documentElement
+        val root = parsed.documentElement!!
         val children = root.childNodes
         for (i in 0 until children.length) {
-            val n = children.item(i)
-            if (n.nodeType == Node.ELEMENT_NODE &&
+            val n = children.item(i) ?: continue
+            if (n is Element &&
                 n.namespaceURI == Namespaces.WORDPROCESSING_ML &&
                 (n.localName == "p" || n.localName == "tbl")
             ) {
@@ -84,11 +88,11 @@ internal object ParagraphSnippetParser {
         // a generous set so any upstream-shaped run element parses.
         val envelopedXml = """<?xml version="1.0" encoding="UTF-8"?><w:document $ENVELOPE_NAMESPACES>$snippetXml</w:document>"""
         val parsed = OoxmlParser.parse(envelopedXml.toByteArray(Charsets.UTF_8))
-        val root = parsed.documentElement
+        val root = parsed.documentElement!!
         val children = root.childNodes
         for (i in 0 until children.length) {
-            val n = children.item(i)
-            if (n.nodeType == Node.ELEMENT_NODE &&
+            val n = children.item(i) ?: continue
+            if (n is Element &&
                 n.namespaceURI == Namespaces.WORDPROCESSING_ML &&
                 n.localName == expectedLocalName
             ) {

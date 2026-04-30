@@ -6,6 +6,7 @@
 // that rId.
 package io.docxkt.patcher
 
+import io.docxkt.pack.toByteArray
 import io.docxkt.api.runs
 import io.docxkt.pack.DocxPackager
 import io.docxkt.patcher.io.DocxReader

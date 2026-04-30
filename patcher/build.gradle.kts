@@ -25,10 +25,12 @@ dependencies {
     // (Paragraph, TableRow, etc. — used as Patch inputs in Phase 32+).
     api(project(":core"))
 
-    // :patcher is otherwise stdlib-only at runtime. javax.xml.parsers and
-    // javax.xml.transform are JDK-bundled — DOM parse + serialize for the
-    // read side is allowed; emission stays hand-rolled.
-    // Do NOT add runtime dependencies — keep the patcher minimal.
+    // pdvrieze/xmlutil drives the patcher's XML read/write pipeline.
+    // Streaming reader+writer preserves source-order namespace
+    // declarations, `xml:space="preserve"`, and duplicate-token
+    // attribute values without the JDK DocumentBuilder workarounds the
+    // pre-migration code carried.
+    implementation(libs.xmlutil.core)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
