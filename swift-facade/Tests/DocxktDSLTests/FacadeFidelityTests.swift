@@ -416,6 +416,514 @@ final class FacadeFidelityTests: XCTestCase {
         )
     }
 
+    // MARK: - Run-level modifiers (v1.2.0 batch)
+
+    func testRunColor() {
+        assertSameBytes(
+            facade: Document {
+                Paragraph { Text("red").color("FF0000") }
+            },
+            raw: DocumentKt.document { scope in
+                scope.paragraph { p in
+                    p.text(value: "red") { rs in rs.color = "FF0000" }
+                }
+            },
+        )
+    }
+
+    func testRunSize() {
+        assertSameBytes(
+            facade: Document {
+                Paragraph { Text("big").size(28) }
+            },
+            raw: DocumentKt.document { scope in
+                scope.paragraph { p in
+                    p.text(value: "big") { rs in rs.size = KotlinInt(int: 28) }
+                }
+            },
+        )
+    }
+
+    func testRunFont() {
+        assertSameBytes(
+            facade: Document {
+                Paragraph { Text("monospace").font("Courier New") }
+            },
+            raw: DocumentKt.document { scope in
+                scope.paragraph { p in
+                    p.text(value: "monospace") { rs in
+                        rs.font(name: "Courier New", hint: nil)
+                    }
+                }
+            },
+        )
+    }
+
+    func testRunHighlight() {
+        assertSameBytes(
+            facade: Document {
+                Paragraph { Text("warning").highlight(.yellow) }
+            },
+            raw: DocumentKt.document { scope in
+                scope.paragraph { p in
+                    p.text(value: "warning") { rs in rs.highlight = .yellow }
+                }
+            },
+        )
+    }
+
+    func testRunStrike() {
+        assertSameBytes(
+            facade: Document {
+                Paragraph { Text("removed").strike() }
+            },
+            raw: DocumentKt.document { scope in
+                scope.paragraph { p in
+                    p.text(value: "removed") { rs in
+                        rs.strike = KotlinBoolean(value: true)
+                    }
+                }
+            },
+        )
+    }
+
+    func testRunDoubleStrike() {
+        assertSameBytes(
+            facade: Document {
+                Paragraph { Text("double").doubleStrike() }
+            },
+            raw: DocumentKt.document { scope in
+                scope.paragraph { p in
+                    p.text(value: "double") { rs in
+                        rs.doubleStrike = KotlinBoolean(value: true)
+                    }
+                }
+            },
+        )
+    }
+
+    func testRunSuperScript() {
+        assertSameBytes(
+            facade: Document {
+                Paragraph { Text("E=mc"); Text("2").superScript() }
+            },
+            raw: DocumentKt.document { scope in
+                scope.paragraph { p in
+                    p.text(value: "E=mc")
+                    p.text(value: "2") { rs in
+                        rs.superScript = KotlinBoolean(value: true)
+                    }
+                }
+            },
+        )
+    }
+
+    func testRunSubScript() {
+        assertSameBytes(
+            facade: Document {
+                Paragraph { Text("H"); Text("2").subScript(); Text("O") }
+            },
+            raw: DocumentKt.document { scope in
+                scope.paragraph { p in
+                    p.text(value: "H")
+                    p.text(value: "2") { rs in
+                        rs.subScript = KotlinBoolean(value: true)
+                    }
+                    p.text(value: "O")
+                }
+            },
+        )
+    }
+
+    // MARK: - Paragraph layout
+
+    func testParagraphAlignment() {
+        assertSameBytes(
+            facade: Document {
+                Paragraph { Text("centered") }.alignment(.center)
+            },
+            raw: DocumentKt.document { scope in
+                scope.paragraph { p in
+                    p.alignment = .center
+                    p.text(value: "centered")
+                }
+            },
+        )
+    }
+
+    func testParagraphSpacing() {
+        assertSameBytes(
+            facade: Document {
+                Paragraph { Text("spaced") }
+                    .spacing(before: 240, after: 120, line: 360, lineRule: .auto)
+            },
+            raw: DocumentKt.document { scope in
+                scope.paragraph { p in
+                    p.spacing(
+                        before: KotlinInt(int: 240),
+                        after: KotlinInt(int: 120),
+                        line: KotlinInt(int: 360),
+                        lineRule: .auto_,
+                        beforeAutoSpacing: nil,
+                        afterAutoSpacing: nil,
+                    )
+                    p.text(value: "spaced")
+                }
+            },
+        )
+    }
+
+    func testParagraphIndent() {
+        assertSameBytes(
+            facade: Document {
+                Paragraph { Text("indented") }
+                    .indent(left: 720, firstLine: 360)
+            },
+            raw: DocumentKt.document { scope in
+                scope.paragraph { p in
+                    p.indent(
+                        start: nil,
+                        end: nil,
+                        left: KotlinInt(int: 720),
+                        right: nil,
+                        hanging: nil,
+                        firstLine: KotlinInt(int: 360),
+                    )
+                    p.text(value: "indented")
+                }
+            },
+        )
+    }
+
+    func testParagraphBorders() {
+        assertSameBytes(
+            facade: Document {
+                Paragraph { Text("rule above") }
+                    .borders(Borders(top: BorderSide(
+                        style: .single, size: 6, color: "auto", space: 1)))
+            },
+            raw: DocumentKt.document { scope in
+                scope.paragraph { p in
+                    p.borders { sides in
+                        sides.top = Docxkt.BorderSide(
+                            style: .single,
+                            size: KotlinInt(int: 6),
+                            color: "auto",
+                            space: KotlinInt(int: 1),
+                        )
+                    }
+                    p.text(value: "rule above")
+                }
+            },
+        )
+    }
+
+    // MARK: - Table-level styling
+
+    func testTableBorders() {
+        assertSameBytes(
+            facade: Document {
+                Table {
+                    Row { Cell { Paragraph { Text("a") } } }
+                }
+                .borders(.all(BorderSide(style: .single, size: 4, color: "auto")))
+            },
+            raw: DocumentKt.document { scope in
+                scope.table { ts in
+                    ts.borders { sides in
+                        let s = Docxkt.BorderSide(
+                            style: .single,
+                            size: KotlinInt(int: 4),
+                            color: "auto",
+                            space: nil,
+                        )
+                        sides.top = s
+                        sides.bottom = s
+                        sides.left = s
+                        sides.right = s
+                    }
+                    ts.row { rs in
+                        rs.cell { cs in
+                            cs.paragraph { p in p.text(value: "a") }
+                        }
+                    }
+                }
+            },
+        )
+    }
+
+    func testTableShading() {
+        assertSameBytes(
+            facade: Document {
+                Table {
+                    Row { Cell { Paragraph { Text("a") } } }
+                }
+                .shading(.solidFill("EEEEEE"))
+            },
+            raw: DocumentKt.document { scope in
+                scope.table { ts in
+                    ts.shading(value: Docxkt.Shading(
+                        pattern: .clear, color: nil, fill: "EEEEEE"))
+                    ts.row { rs in
+                        rs.cell { cs in
+                            cs.paragraph { p in p.text(value: "a") }
+                        }
+                    }
+                }
+            },
+        )
+    }
+
+    func testTableCellMargins() {
+        assertSameBytes(
+            facade: Document {
+                Table {
+                    Row { Cell { Paragraph { Text("a") } } }
+                }
+                .cellMargins(CellMargins(top: 100, left: 120, bottom: 100, right: 120))
+            },
+            raw: DocumentKt.document { scope in
+                scope.table { ts in
+                    ts.cellMargins(
+                        top: KotlinInt(int: 100),
+                        left: KotlinInt(int: 120),
+                        bottom: KotlinInt(int: 100),
+                        right: KotlinInt(int: 120),
+                    )
+                    ts.row { rs in
+                        rs.cell { cs in
+                            cs.paragraph { p in p.text(value: "a") }
+                        }
+                    }
+                }
+            },
+        )
+    }
+
+    // MARK: - Cell-level styling
+
+    func testCellBorders() {
+        assertSameBytes(
+            facade: Document {
+                Table {
+                    Row {
+                        Cell { Paragraph { Text("a") } }
+                            .borders(Borders(bottom: BorderSide(style: .single, size: 8)))
+                    }
+                }
+            },
+            raw: DocumentKt.document { scope in
+                scope.table { ts in
+                    ts.row { rs in
+                        rs.cell { cs in
+                            cs.borders { sides in
+                                sides.bottom = Docxkt.BorderSide(
+                                    style: .single,
+                                    size: KotlinInt(int: 8),
+                                    color: nil,
+                                    space: nil,
+                                )
+                            }
+                            cs.paragraph { p in p.text(value: "a") }
+                        }
+                    }
+                }
+            },
+        )
+    }
+
+    func testCellShading() {
+        assertSameBytes(
+            facade: Document {
+                Table {
+                    Row {
+                        Cell { Paragraph { Text("a") } }
+                            .shading(.solidFill("DDDDDD"))
+                    }
+                }
+            },
+            raw: DocumentKt.document { scope in
+                scope.table { ts in
+                    ts.row { rs in
+                        rs.cell { cs in
+                            cs.shading(value: Docxkt.Shading(
+                                pattern: .clear, color: nil, fill: "DDDDDD"))
+                            cs.paragraph { p in p.text(value: "a") }
+                        }
+                    }
+                }
+            },
+        )
+    }
+
+    func testCellMargins() {
+        assertSameBytes(
+            facade: Document {
+                Table {
+                    Row {
+                        Cell { Paragraph { Text("a") } }
+                            .margins(CellMargins(top: 50, left: 80, bottom: 50, right: 80))
+                    }
+                }
+            },
+            raw: DocumentKt.document { scope in
+                scope.table { ts in
+                    ts.row { rs in
+                        rs.cell { cs in
+                            cs.margins(
+                                top: KotlinInt(int: 50),
+                                left: KotlinInt(int: 80),
+                                bottom: KotlinInt(int: 50),
+                                right: KotlinInt(int: 80),
+                            )
+                            cs.paragraph { p in p.text(value: "a") }
+                        }
+                    }
+                }
+            },
+        )
+    }
+
+    func testCellVerticalAlign() {
+        assertSameBytes(
+            facade: Document {
+                Table {
+                    Row {
+                        Cell { Paragraph { Text("a") } }.verticalAlign(.center)
+                    }
+                }
+            },
+            raw: DocumentKt.document { scope in
+                scope.table { ts in
+                    ts.row { rs in
+                        rs.cell { cs in
+                            cs.verticalAlign(value: .center)
+                            cs.paragraph { p in p.text(value: "a") }
+                        }
+                    }
+                }
+            },
+        )
+    }
+
+    func testCellGridSpan() {
+        assertSameBytes(
+            facade: Document {
+                Table {
+                    Row {
+                        Cell { Paragraph { Text("merged") } }.gridSpan(2)
+                    }
+                    Row {
+                        Cell { Paragraph { Text("a") } }
+                        Cell { Paragraph { Text("b") } }
+                    }
+                }
+            },
+            raw: DocumentKt.document { scope in
+                scope.table { ts in
+                    ts.row { rs in
+                        rs.cell { cs in
+                            cs.gridSpan(columns: 2)
+                            cs.paragraph { p in p.text(value: "merged") }
+                        }
+                    }
+                    ts.row { rs in
+                        rs.cell { cs in cs.paragraph { p in p.text(value: "a") } }
+                        rs.cell { cs in cs.paragraph { p in p.text(value: "b") } }
+                    }
+                }
+            },
+        )
+    }
+
+    func testCellVerticalMerge() {
+        assertSameBytes(
+            facade: Document {
+                Table {
+                    Row {
+                        Cell { Paragraph { Text("rowspan2") } }.verticalMerge(.restart)
+                        Cell { Paragraph { Text("a") } }
+                    }
+                    Row {
+                        Cell {}.verticalMerge(.continue)
+                        Cell { Paragraph { Text("b") } }
+                    }
+                }
+            },
+            raw: DocumentKt.document { scope in
+                scope.table { ts in
+                    ts.row { rs in
+                        rs.cell { cs in
+                            cs.verticalMerge(value: .restart)
+                            cs.paragraph { p in p.text(value: "rowspan2") }
+                        }
+                        rs.cell { cs in cs.paragraph { p in p.text(value: "a") } }
+                    }
+                    ts.row { rs in
+                        rs.cell { cs in
+                            cs.verticalMerge(value: .continue_)
+                        }
+                        rs.cell { cs in cs.paragraph { p in p.text(value: "b") } }
+                    }
+                }
+            },
+        )
+    }
+
+    // MARK: - Section.pageBorders + Document.lineNumbering
+
+    func testSectionPageBorders() {
+        assertSameBytes(
+            facade: Document {
+                Paragraph { Text("before") }
+                Section(pageBorders: .all(
+                    BorderSide(style: .single, size: 12, color: "auto", space: 24),
+                    display: .allPages,
+                    offsetFrom: .page,
+                ))
+                Paragraph { Text("after") }
+            },
+            raw: DocumentKt.document { scope in
+                scope.paragraph { p in p.text(value: "before") }
+                scope.sectionBreak { ss in
+                    ss.pageBorders { pb in
+                        let s = Docxkt.BorderSide(
+                            style: .single,
+                            size: KotlinInt(int: 12),
+                            color: "auto",
+                            space: KotlinInt(int: 24),
+                        )
+                        pb.top = s
+                        pb.left = s
+                        pb.bottom = s
+                        pb.right = s
+                        pb.display = .allPages
+                        pb.offsetFrom = .page
+                    }
+                }
+                scope.paragraph { p in p.text(value: "after") }
+            },
+        )
+    }
+
+    func testDocumentLineNumbering() {
+        assertSameBytes(
+            facade: Document {
+                LineNumbering(countBy: 1, start: 1, distance: 360, restart: .newPage)
+                Paragraph { Text("body") }
+            },
+            raw: DocumentKt.document { scope in
+                scope.lineNumbering(
+                    countBy: KotlinInt(int: 1),
+                    start: KotlinInt(int: 1),
+                    distanceTwips: KotlinInt(int: 360),
+                    restart: .theNewPage,
+                )
+                scope.paragraph { p in p.text(value: "body") }
+            },
+        )
+    }
+
     func testSectionBreakWithMarginsInches() {
         assertSameBytes(
             facade: Document {

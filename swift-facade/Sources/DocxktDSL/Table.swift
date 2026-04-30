@@ -1,10 +1,24 @@
 import Docxkt
 
 /// A table that can sit inside a document body, header, or footer.
+///
+/// Table-wide styling is applied via SwiftUI-style modifiers:
+///
+/// ```swift
+/// Table(width: .pct(5000)) {
+///     Row { Cell { Paragraph { Text("hi") } } }
+/// }
+/// .borders(.all(BorderSide(style: .single, size: 4, color: "auto")))
+/// .shading(.solidFill("EEEEEE"))
+/// .cellMargins(CellMargins(top: 100, left: 120, bottom: 100, right: 120))
+/// ```
 public struct Table {
     internal let rows: [Row]
     internal let width: Width?
     internal let columnWidths: [Int]?
+    internal var borders: Borders? = nil
+    internal var shading: Shading? = nil
+    internal var cellMargins: CellMargins? = nil
 
     /// Default table init — width inherits the underlying Kotlin DSL
     /// upstream-parity default (`tblW type=auto, w=100`), which renders
@@ -51,12 +65,43 @@ public struct Table {
         case nilType
     }
 
+    /// Set `<w:tblBorders>`. Sides left unset in the [Borders] block
+    /// fall through to upstream defaults (single, size 4, auto).
+    public func borders(_ value: Borders) -> Table {
+        var copy = self; copy.borders = value; return copy
+    }
+
+    /// Set `<w:shd>` (table-level shading).
+    public func shading(_ value: Shading) -> Table {
+        var copy = self; copy.shading = value; return copy
+    }
+
+    /// Set `<w:tblCellMar>` (default margins for cells without explicit
+    /// margins of their own). Twips.
+    public func cellMargins(_ value: CellMargins) -> Table {
+        var copy = self; copy.cellMargins = value; return copy
+    }
+
     internal func applyToTable(_ tableScope: KotlinTableScope) {
         if let width {
             tableScope.width(value: width.kotlin)
         }
         if let columnWidths {
             tableScope.columnWidths(twips: columnWidths.toKotlinIntArray())
+        }
+        if let borders {
+            tableScope.borders { sides in borders.apply(to: sides) }
+        }
+        if let shading {
+            tableScope.shading(value: shading.kotlin)
+        }
+        if let cellMargins {
+            tableScope.cellMargins(
+                top: cellMargins.top.map { KotlinInt(int: Int32($0)) },
+                left: cellMargins.left.map { KotlinInt(int: Int32($0)) },
+                bottom: cellMargins.bottom.map { KotlinInt(int: Int32($0)) },
+                right: cellMargins.right.map { KotlinInt(int: Int32($0)) },
+            )
         }
         for row in rows {
             tableScope.row(configure: row.applyToRow)
@@ -105,14 +150,89 @@ public struct Row {
 }
 
 /// A cell inside a row. Cells contain paragraphs.
+///
+/// Cell-level styling is applied via SwiftUI-style modifiers:
+///
+/// ```swift
+/// Cell { Paragraph { Text("Header A").bold() } }
+///     .verticalAlign(.center)
+///     .shading(.solidFill("E7E6E6"))
+///     .gridSpan(2)              // colspan=2
+///     .borders(Borders(bottom: BorderSide(style: .single, size: 8)))
+/// ```
 public struct Cell {
     internal let paragraphs: [Paragraph]
+    internal var borders: Borders? = nil
+    internal var shading: Shading? = nil
+    internal var margins: CellMargins? = nil
+    internal var verticalAlign: CellVerticalAlignment? = nil
+    internal var gridSpan: Int? = nil
+    internal var verticalMerge: CellVerticalMerge? = nil
 
     public init(@CellBuilder content: () -> [Paragraph]) {
         self.paragraphs = content()
     }
 
+    /// Set `<w:tcBorders>`. Only sides explicitly set in the [Borders]
+    /// block emit on the wire (cell-level variant — unlike table-level
+    /// which fills in upstream defaults).
+    public func borders(_ value: Borders) -> Cell {
+        var copy = self; copy.borders = value; return copy
+    }
+
+    /// Set `<w:shd>` (cell-level shading).
+    public func shading(_ value: Shading) -> Cell {
+        var copy = self; copy.shading = value; return copy
+    }
+
+    /// Set `<w:tcMar>` (cell margins; overrides table-default cell margins).
+    public func margins(_ value: CellMargins) -> Cell {
+        var copy = self; copy.margins = value; return copy
+    }
+
+    /// Set vertical alignment of the cell content (`<w:vAlign>`).
+    public func verticalAlign(_ value: CellVerticalAlignment) -> Cell {
+        var copy = self; copy.verticalAlign = value; return copy
+    }
+
+    /// Merge across [columns] grid columns (`<w:gridSpan>`). Equivalent
+    /// to HTML's `colspan`. Must be ≥ 1.
+    public func gridSpan(_ columns: Int) -> Cell {
+        var copy = self; copy.gridSpan = columns; return copy
+    }
+
+    /// Mark this cell as the start (`.restart`) or continuation
+    /// (`.continue`) of a vertical merge across rows (`<w:vMerge>`).
+    /// Equivalent to HTML's `rowspan` (the start cell carries content;
+    /// continue cells should be empty `Cell { }`).
+    public func verticalMerge(_ value: CellVerticalMerge) -> Cell {
+        var copy = self; copy.verticalMerge = value; return copy
+    }
+
     internal func applyToCell(_ cellScope: KotlinTableCellScope) {
+        if let gridSpan {
+            cellScope.gridSpan(columns: Int32(gridSpan))
+        }
+        if let verticalMerge {
+            cellScope.verticalMerge(value: verticalMerge.kotlin)
+        }
+        if let verticalAlign {
+            cellScope.verticalAlign(value: verticalAlign.kotlin)
+        }
+        if let borders {
+            cellScope.borders { sides in borders.apply(to: sides) }
+        }
+        if let shading {
+            cellScope.shading(value: shading.kotlin)
+        }
+        if let margins {
+            cellScope.margins(
+                top: margins.top.map { KotlinInt(int: Int32($0)) },
+                left: margins.left.map { KotlinInt(int: Int32($0)) },
+                bottom: margins.bottom.map { KotlinInt(int: Int32($0)) },
+                right: margins.right.map { KotlinInt(int: Int32($0)) },
+            )
+        }
         for paragraph in paragraphs {
             cellScope.paragraph(configure: paragraph.applyToParagraph)
         }

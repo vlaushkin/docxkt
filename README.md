@@ -8,7 +8,7 @@ golden-fixture test harness pinning the wire to upstream.
 
 ## Status
 
-**v1.1.1** — Kotlin Multiplatform release. JVM and Android consumers
+**v1.2.0** — Kotlin Multiplatform release. JVM and Android consumers
 keep the v1 API; iOS / macOS land via an Apple `XCFramework` and an
 optional SwiftUI-style facade Swift Package.
 
@@ -29,8 +29,8 @@ optional SwiftUI-style facade Swift Package.
 
 ```kotlin
 dependencies {
-    implementation("io.github.vlaushkin:docxkt-core:1.1.0")     // KMP, picks JVM/Android variant
-    implementation("io.github.vlaushkin:docxkt-patcher:1.1.0")  // template patching (optional)
+    implementation("io.github.vlaushkin:docxkt-core:1.2.0")     // KMP, picks JVM/Android variant
+    implementation("io.github.vlaushkin:docxkt-patcher:1.2.0")  // template patching (optional)
 }
 ```
 
@@ -45,7 +45,7 @@ no longer exists.)
 In your app's `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/vlaushkin/docxkt", from: "1.1.0"),
+.package(url: "https://github.com/vlaushkin/docxkt", from: "1.2.0"),
 // in target dependencies:
 .product(name: "DocxktDSL", package: "docxkt"),
 ```
@@ -156,9 +156,14 @@ let doc = Document {
 try doc.write(to: outputURL)
 ```
 
-`Section` accepts `orientation`, `columns`, `type`, `hasTitlePage`, and
-`margins` (twips, or `.inches(...)` / `.cm(...)` factories) — full parity
-with the Kotlin `sectionBreak { … }` scope's most-used surface.
+`Section` accepts `orientation`, `columns`, `type`, `hasTitlePage`,
+`margins` (twips, or `.inches(...)` / `.cm(...)` factories), and
+`pageBorders`. `Paragraph` and `Cell` carry SwiftUI-style modifiers for
+alignment, spacing, indentation, borders, shading, and cell-level layout
+(verticalAlign, gridSpan, verticalMerge). `Text` adds `.color(...)`,
+`.size(...)`, `.font(...)`, `.highlight(...)`, `.strike()`,
+`.superScript()`, `.subScript()` on top of bold / italic / underline.
+Full typography parity with the Kotlin DSL's most-used surface.
 
 A complete iOS + macOS sample app lives at `sample-apple/`. Open
 `sample-apple.xcodeproj` and run the `SampleApple` scheme on either
@@ -257,7 +262,7 @@ Test counts:
 - `./gradlew :core:macosArm64Test` — 269 tests
 - `./gradlew :core:iosSimulatorArm64Test` — 269 tests
 - `./gradlew :patcher:test` — 104 tests
-- `cd swift-facade && swift test` — 47 tests (16 smoke + 31 facade-vs-raw fidelity)
+- `swift test` (from repo root) — 70 tests (16 smoke + 54 facade-vs-raw fidelity)
 
 Toolchain: Kotlin 2.3.21, JVM 21, AGP 8.13.x, `explicitApi()` enabled
 in `:core` and `:patcher`. iOS 17+, macOS 14+ (arm64 only —

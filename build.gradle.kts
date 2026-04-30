@@ -13,5 +13,5 @@ plugins {
 // `io.docxkt` later is a one-line flip after registering the namespace.
 allprojects {
     group = "io.github.vlaushkin"
-    version = "1.1.1"
+    version = "1.2.0"
 }

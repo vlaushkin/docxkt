@@ -111,6 +111,10 @@ public enum DocumentBuilder {
         DocumentBlock { scope in comment.applyToDocument(scope) }
     }
 
+    public static func buildExpression(_ lineNumbering: LineNumbering) -> DocumentBlock {
+        DocumentBlock { scope in lineNumbering.applyToDocument(scope) }
+    }
+
     public static func buildBlock(_ components: DocumentBlock...) -> [DocumentBlock] {
         components
     }

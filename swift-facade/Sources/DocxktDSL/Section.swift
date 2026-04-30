@@ -30,18 +30,24 @@ public struct Section {
     /// defaults (1 inch on all sides, 0.49 inch header/footer).
     public var margins: PageMargins?
 
+    /// `<w:pgBorders>` — page borders for this section. `nil` omits
+    /// the element entirely.
+    public var pageBorders: PageBorders?
+
     public init(
         orientation: PageOrientation? = nil,
         columns: Int? = nil,
         type: SectionType? = nil,
         hasTitlePage: Bool = false,
         margins: PageMargins? = nil,
+        pageBorders: PageBorders? = nil,
     ) {
         self.orientation = orientation
         self.columns = columns
         self.type = type
         self.hasTitlePage = hasTitlePage
         self.margins = margins
+        self.pageBorders = pageBorders
     }
 
     public enum PageOrientation {
@@ -159,6 +165,11 @@ public struct Section {
                     footer: KotlinInt(int: Int32(margins.footer)),
                     gutter: KotlinInt(int: Int32(margins.gutter)),
                 )
+            }
+            if let pageBorders {
+                sectionScope.pageBorders { borderScope in
+                    pageBorders.apply(to: borderScope)
+                }
             }
             if let columns {
                 sectionScope.columns(

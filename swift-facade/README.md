@@ -62,11 +62,15 @@ Top-level (children of `Document { … }`):
 - `Paragraph(numbering: NumberingReference("id", level: N)) { … }` — list item
 - `Table { Row { Cell { … } } }` — basic tables
 - `Header { … }` / `Footer { … }` — default page header/footer
-- `Section(orientation:, columns:, type:, hasTitlePage:, margins:)` —
-  section break. `margins` accepts a `Section.PageMargins` (twips), or
+- `Section(orientation:, columns:, type:, hasTitlePage:, margins:, pageBorders:)`
+  — section break. `margins` accepts a `Section.PageMargins` (twips), or
   the `.inches(top:right:bottom:left:header:footer:gutter:)` /
-  `.cm(...)` factories. Reaches parity with the Kotlin
-  `sectionBreak { margins(...) }` surface — see example below.
+  `.cm(...)` factories. `pageBorders` accepts a `PageBorders` —
+  `PageBorders.all(BorderSide(...), display: .allPages)` covers the
+  most common case. Reaches parity with the Kotlin
+  `sectionBreak { margins(...); pageBorders { ... } }` surface.
+- `LineNumbering(countBy:, start:, distance:, restart:)` — document-level
+  line numbering, sits as a top-level Document block.
 - `Properties(title:, creator:, keywords:, custom:, …)` — document metadata
 - `ParagraphStyle(id:, name:, basedOn:, bold:, italic:, size:, color:, fontFamily:, …)` — style definition
 - `CharacterStyle(id:, …)` — run-style definition
@@ -74,7 +78,10 @@ Top-level (children of `Document { … }`):
 
 Inline (children of `Paragraph { … }`):
 
-- `Text("…")` with `.bold()` / `.italic()` / `.underline()` / `.styled("id")` modifiers
+- `Text("…")` with `.bold()` / `.italic()` / `.underline()` / `.strike()` /
+  `.doubleStrike()` / `.superScript()` / `.subScript()` /
+  `.color("FF0000")` / `.size(28)` / `.font("Courier New")` /
+  `.highlight(.yellow)` / `.styled("id")` modifiers
 - `Link("https://…") { Text("…") }` — external hyperlink
 - `Image(data:, widthEmus:, heightEmus:, format: .png/.jpeg/.gif/.bmp, description:)` — inline image
 - `AnchorImage(data:, widthEmus:, heightEmus:, format:) { anchor in … }` — floating image with positioning + wrap
@@ -87,6 +94,38 @@ Annotations (footnotes, endnotes, comments):
 - `Comment(id:, author:, initials:, date:) { Paragraph { … } }` — comment definition (top-level)
 - `FootnoteReference(id:)` / `EndnoteReference(id:)` — inline reference markers
 - `CommentRangeStart(id:)` / `CommentRangeEnd(id:)` / `CommentReference(id:)` — inline comment-range markers
+
+### Paragraph layout
+
+```swift
+Paragraph { Text("Centered, generously spaced") }
+    .alignment(.center)
+    .spacing(before: 240, after: 120, line: 360, lineRule: .auto)
+    .indent(left: 720, firstLine: 360)
+
+Paragraph { Text("Block quote") }
+    .borders(Borders.all(BorderSide(style: .single, size: 6, color: "999999")))
+```
+
+### Table & cell styling
+
+```swift
+Table(width: .pct(5000)) {
+    Row {
+        Cell { Paragraph { Text("Header A").bold() } }
+            .verticalAlign(.center)
+            .shading(.solidFill("E7E6E6"))
+        Cell { Paragraph { Text("Header B").bold() } }
+            .verticalAlign(.center)
+            .shading(.solidFill("E7E6E6"))
+    }
+    Row {
+        Cell { Paragraph { Text("merged across two columns") } }.gridSpan(2)
+    }
+}
+.borders(.all(BorderSide(style: .single, size: 4, color: "auto")))
+.cellMargins(CellMargins(top: 100, left: 120, bottom: 100, right: 120))
+```
 
 ### Section page setup
 
