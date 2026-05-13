@@ -388,6 +388,153 @@ final class FacadeFidelityTests: XCTestCase {
         )
     }
 
+    func testSectionBreakWithExplicitPageSize() {
+        assertSameBytes(
+            facade: Document {
+                Paragraph { Text("before") }
+                Section(pageSize: .twips(width: 6000, height: 8000))
+                Paragraph { Text("after") }
+            },
+            raw: DocumentKt.document { scope in
+                scope.paragraph { p in p.text(value: "before") }
+                scope.sectionBreak { ss in
+                    ss.pageSize(
+                        widthTwips: 6000,
+                        heightTwips: 8000,
+                        orientation: PageOrientation.portrait,
+                    )
+                }
+                scope.paragraph { p in p.text(value: "after") }
+            },
+        )
+    }
+
+    func testSectionBreakWithPerSectionHeaderAndFooter() {
+        assertSameBytes(
+            facade: Document {
+                Paragraph { Text("before") }
+                Section(
+                    pageSize: .twips(width: 6000, height: 8000),
+                    margins: Section.PageMargins(
+                        top: 200, right: 200, bottom: 200, left: 200,
+                        header: 100, footer: 100, gutter: 0,
+                    ),
+                    header: Header { Paragraph { Text("INLINE H") } },
+                    footer: Footer { Paragraph { Text("INLINE F") } },
+                )
+                Paragraph { Text("after") }
+            },
+            raw: DocumentKt.document { scope in
+                scope.paragraph { p in p.text(value: "before") }
+                scope.sectionBreak { ss in
+                    ss.pageSize(
+                        widthTwips: 6000,
+                        heightTwips: 8000,
+                        orientation: PageOrientation.portrait,
+                    )
+                    ss.margins(
+                        top: KotlinInt(int: 200),
+                        right: KotlinInt(int: 200),
+                        bottom: KotlinInt(int: 200),
+                        left: KotlinInt(int: 200),
+                        header: KotlinInt(int: 100),
+                        footer: KotlinInt(int: 100),
+                        gutter: KotlinInt(int: 0),
+                    )
+                    ss.header(type: HeaderFooterReferenceType.default_) { hs in
+                        hs.paragraph { p in p.text(value: "INLINE H") }
+                    }
+                    ss.footer(type: HeaderFooterReferenceType.default_) { fs in
+                        fs.paragraph { p in p.text(value: "INLINE F") }
+                    }
+                }
+                scope.paragraph { p in p.text(value: "after") }
+            },
+        )
+    }
+
+    func testTwoSectionsEachWithOwnHeaderFooter() {
+        // Mirrors the Photo2Docx use case: each "page" is its own
+        // section with own pgSz and own H/F.
+        assertSameBytes(
+            facade: Document {
+                Paragraph { Text("img 1") }
+                Section(
+                    pageSize: .twips(width: 6000, height: 8000),
+                    header: Header { Paragraph { Text("H A") } },
+                    footer: Footer { Paragraph { Text("F A") } },
+                )
+                Paragraph { Text("img 2") }
+                Section(
+                    pageSize: .twips(width: 6000, height: 9000),
+                    header: Header { Paragraph { Text("H B") } },
+                    footer: Footer { Paragraph { Text("F B") } },
+                )
+                Paragraph { Text("img 3") }
+            },
+            raw: DocumentKt.document { scope in
+                scope.paragraph { p in p.text(value: "img 1") }
+                scope.sectionBreak { ss in
+                    ss.pageSize(
+                        widthTwips: 6000, heightTwips: 8000,
+                        orientation: PageOrientation.portrait,
+                    )
+                    ss.header(type: HeaderFooterReferenceType.default_) { hs in
+                        hs.paragraph { p in p.text(value: "H A") }
+                    }
+                    ss.footer(type: HeaderFooterReferenceType.default_) { fs in
+                        fs.paragraph { p in p.text(value: "F A") }
+                    }
+                }
+                scope.paragraph { p in p.text(value: "img 2") }
+                scope.sectionBreak { ss in
+                    ss.pageSize(
+                        widthTwips: 6000, heightTwips: 9000,
+                        orientation: PageOrientation.portrait,
+                    )
+                    ss.header(type: HeaderFooterReferenceType.default_) { hs in
+                        hs.paragraph { p in p.text(value: "H B") }
+                    }
+                    ss.footer(type: HeaderFooterReferenceType.default_) { fs in
+                        fs.paragraph { p in p.text(value: "F B") }
+                    }
+                }
+                scope.paragraph { p in p.text(value: "img 3") }
+            },
+        )
+    }
+
+    func testSectionWithFirstAndDefaultHeaders() {
+        // FIRST + DEFAULT in one section; ensure canonical
+        // DEFAULT→FIRST emission order keeps byte parity.
+        assertSameBytes(
+            facade: Document {
+                Paragraph { Text("body") }
+                Section(
+                    hasTitlePage: true,
+                    headers: [
+                        .default: Header { Paragraph { Text("DEFAULT") } },
+                        .first: Header { Paragraph { Text("FIRST") } },
+                    ],
+                )
+                Paragraph { Text("more body") }
+            },
+            raw: DocumentKt.document { scope in
+                scope.paragraph { p in p.text(value: "body") }
+                scope.sectionBreak { ss in
+                    ss.titlePage()
+                    ss.header(type: HeaderFooterReferenceType.default_) { hs in
+                        hs.paragraph { p in p.text(value: "DEFAULT") }
+                    }
+                    ss.header(type: HeaderFooterReferenceType.first) { hs in
+                        hs.paragraph { p in p.text(value: "FIRST") }
+                    }
+                }
+                scope.paragraph { p in p.text(value: "more body") }
+            },
+        )
+    }
+
     func testSectionBreakWithMarginsTwips() {
         assertSameBytes(
             facade: Document {

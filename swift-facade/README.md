@@ -62,13 +62,22 @@ Top-level (children of `Document { … }`):
 - `Paragraph(numbering: NumberingReference("id", level: N)) { … }` — list item
 - `Table { Row { Cell { … } } }` — basic tables
 - `Header { … }` / `Footer { … }` — default page header/footer
-- `Section(orientation:, columns:, type:, hasTitlePage:, margins:, pageBorders:)`
-  — section break. `margins` accepts a `Section.PageMargins` (twips), or
-  the `.inches(top:right:bottom:left:header:footer:gutter:)` /
-  `.cm(...)` factories. `pageBorders` accepts a `PageBorders` —
+- `Section(orientation:, pageSize:, columns:, type:, hasTitlePage:,
+  margins:, pageBorders:, header:, footer:, headers:, footers:)` —
+  section break. `pageSize` accepts a `Section.PageSize` —
+  `.twips(width:, height:)` or `.inches(width:, height:)` (use this when
+  the page must match a non-A4 aspect; mutually exclusive with
+  `orientation`, `pageSize` wins). `margins` accepts a
+  `Section.PageMargins` (twips), or the
+  `.inches(top:right:bottom:left:header:footer:gutter:)` / `.cm(...)`
+  factories. `pageBorders` accepts a `PageBorders` —
   `PageBorders.all(BorderSide(...), display: .allPages)` covers the
-  most common case. Reaches parity with the Kotlin
-  `sectionBreak { margins(...); pageBorders { ... } }` surface.
+  most common case. `header:` / `footer:` attach a per-section
+  default-page colontitual; use the dictionary form
+  `headers: [.first: Header { … }, .default: Header { … }]` for
+  first-page / even-page slots. Reaches parity with the Kotlin
+  `sectionBreak { pageSize(...); margins(...); pageBorders { ... };
+  header { ... }; footer { ... } }` surface.
 - `LineNumbering(countBy:, start:, distance:, restart:)` — document-level
   line numbering, sits as a top-level Document block.
 - `Properties(title:, creator:, keywords:, custom:, …)` — document metadata
@@ -144,6 +153,47 @@ Twips work too if you'd rather not convert (`Section.PageMargins(top:
 720, ...)` — 1 inch = 1440 twips). Defaults match upstream's
 `<w:pgMar>`: `top/right/bottom/left = 1440`, `header/footer = 708`,
 `gutter = 0`. Any field you don't set keeps that default.
+
+### Per-section headers and footers
+
+Each `Section` can carry its own colontituals — useful when the
+document spans multiple sections that need different running text, or
+when each section has its own page size (e.g. one section per image,
+each shrunk to the image's aspect ratio):
+
+```swift
+Document {
+    for image in images {
+        Paragraph { Image(data: image.bytes, widthEmus: …, heightEmus: …, format: .jpeg) }
+        Section(
+            pageSize: .twips(width: image.pageWidthTwips, height: image.pageHeightTwips),
+            margins: Section.PageMargins(top: 200, right: 200, bottom: 200, left: 200),
+            header: Header { Paragraph { Text("\(image.caption)").alignment(.left) } },
+            footer: Footer { Paragraph { Text("page \(image.pageNumber)").alignment(.right) } },
+        )
+    }
+}
+```
+
+Each section materializes its own `word/headerN.xml` and
+`word/footerN.xml` parts with matching `[Content_Types].xml` overrides;
+the section's inline `<w:sectPr>` carries the corresponding
+`<w:headerReference>` / `<w:footerReference>`.
+
+For first-page or even-page slots, use the dictionary form:
+
+```swift
+Section(
+    hasTitlePage: true,
+    headers: [
+        .first: Header { Paragraph { Text("Title page") } },
+        .default: Header { Paragraph { Text("Running header") } },
+    ],
+)
+```
+
+Top-level `Header { … }` and `Footer { … }` blocks on `Document { … }`
+attach to the trailing section only (the unchanged v1 behaviour).
 
 ## Reaching the raw Kotlin API
 

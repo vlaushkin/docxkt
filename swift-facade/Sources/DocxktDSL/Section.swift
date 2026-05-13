@@ -11,10 +11,31 @@ import Docxkt
 ///     Paragraph { Text("Landscape, two-column section") }
 /// }
 /// ```
+///
+/// Per-section headers and footers (one per page page type — default,
+/// first, even — per section) land in dedicated `word/headerN.xml` /
+/// `word/footerN.xml` parts and are referenced from this section's
+/// inline `<w:sectPr>`:
+///
+/// ```swift
+/// Section(
+///     pageSize: .twips(width: 6000, height: 8000),
+///     margins: .twips(top: 200, bottom: 200, left: 200, right: 200),
+///     header: Header { Paragraph { Text("Page 1 of N") } },
+///     footer: Footer { Paragraph { Text("draft").italic() } },
+/// )
+/// ```
 public struct Section {
-    /// Page orientation for the section. `nil` inherits the previous
-    /// section's orientation (portrait by default).
+    /// Page orientation for the section. Sets A4 dimensions in the
+    /// requested orientation. Mutually exclusive with `pageSize` —
+    /// `pageSize`, when set, wins.
     public var orientation: PageOrientation?
+
+    /// Explicit page size in twips (1 inch = 1440 twips). `nil` keeps
+    /// whatever `orientation` resolves to (A4 portrait by default).
+    /// Use this when the page must match a non-A4 aspect (e.g. one
+    /// image per section with the page shrunk to the image's ratio).
+    public var pageSize: PageSize?
 
     /// Number of columns. `nil` keeps the default single column.
     public var columns: Int?
@@ -34,20 +55,40 @@ public struct Section {
     /// the element entirely.
     public var pageBorders: PageBorders?
 
+    /// Per-section headers, keyed by page type. Each entry produces
+    /// a dedicated `word/headerN.xml` part referenced from this
+    /// section's inline `<w:sectPr>`. Empty = no header references.
+    public var headers: [HeaderFooterType: Header]
+
+    /// Per-section footers — same shape as `headers`.
+    public var footers: [HeaderFooterType: Footer]
+
     public init(
         orientation: PageOrientation? = nil,
+        pageSize: PageSize? = nil,
         columns: Int? = nil,
         type: SectionType? = nil,
         hasTitlePage: Bool = false,
         margins: PageMargins? = nil,
         pageBorders: PageBorders? = nil,
+        header: Header? = nil,
+        footer: Footer? = nil,
+        headers: [HeaderFooterType: Header] = [:],
+        footers: [HeaderFooterType: Footer] = [:],
     ) {
         self.orientation = orientation
+        self.pageSize = pageSize
         self.columns = columns
         self.type = type
         self.hasTitlePage = hasTitlePage
         self.margins = margins
         self.pageBorders = pageBorders
+        var hs = headers
+        if let header { hs[.default] = header }
+        self.headers = hs
+        var fs = footers
+        if let footer { fs[.default] = footer }
+        self.footers = fs
     }
 
     public enum PageOrientation {
@@ -61,6 +102,62 @@ public struct Section {
         case nextColumn
         case oddPage
         case evenPage
+    }
+
+    /// Which page type a header / footer applies to.
+    public enum HeaderFooterType: Hashable {
+        /// Every page that isn't covered by `.first` or `.even`.
+        case `default`
+        /// The first page of the section. Section-level title-page
+        /// behavior (`<w:titlePg/>`) is OFF by default — set
+        /// `hasTitlePage: true` on the `Section` to enable it.
+        case first
+        /// Even-numbered pages. Setting this auto-enables
+        /// `<w:evenAndOddHeaders/>` in `word/settings.xml` (a global
+        /// switch — applies document-wide once any section asks for it).
+        case even
+    }
+
+    /// `<w:pgSz>` page size, in twips (1 inch = 1440 twips). The
+    /// `orientation` field is informational on the wire (`w:orient`).
+    public struct PageSize {
+        public var widthTwips: Int
+        public var heightTwips: Int
+        public var orientation: PageOrientation
+
+        public init(
+            widthTwips: Int,
+            heightTwips: Int,
+            orientation: PageOrientation = .portrait,
+        ) {
+            self.widthTwips = widthTwips
+            self.heightTwips = heightTwips
+            self.orientation = orientation
+        }
+
+        /// Build from twips. Orientation defaults to portrait — flip to
+        /// landscape only when the wire attribute matters to the
+        /// consumer (Word infers visual orientation from width/height).
+        public static func twips(
+            width: Int,
+            height: Int,
+            orientation: PageOrientation = .portrait,
+        ) -> PageSize {
+            PageSize(widthTwips: width, heightTwips: height, orientation: orientation)
+        }
+
+        /// Build from inches (1 inch = 1440 twips).
+        public static func inches(
+            width: Double,
+            height: Double,
+            orientation: PageOrientation = .portrait,
+        ) -> PageSize {
+            PageSize(
+                widthTwips: Int((width * 1440).rounded()),
+                heightTwips: Int((height * 1440).rounded()),
+                orientation: orientation,
+            )
+        }
     }
 
     /// `<w:pgMar>` page margins, in twips (1 inch = 1440 twips).
@@ -149,7 +246,14 @@ public struct Section {
 
     internal func applyToDocument(_ scope: KotlinDocumentScope) {
         scope.sectionBreak { sectionScope in
-            if let orientation {
+            // Explicit pageSize wins over the orientation A4 preset.
+            if let pageSize {
+                sectionScope.pageSize(
+                    widthTwips: Int32(pageSize.widthTwips),
+                    heightTwips: Int32(pageSize.heightTwips),
+                    orientation: pageSize.orientation.kotlin,
+                )
+            } else if let orientation {
                 switch orientation {
                 case .portrait: sectionScope.a4Portrait()
                 case .landscape: sectionScope.a4Landscape()
@@ -186,6 +290,23 @@ public struct Section {
             if hasTitlePage {
                 sectionScope.titlePage()
             }
+            // Canonical order: DEFAULT → FIRST → EVEN. Matches the
+            // emission order Kotlin's allocator uses, so byte-equal
+            // parity stays trivial.
+            for hfType in Section.HeaderFooterType.canonicalOrder {
+                if let header = headers[hfType] {
+                    sectionScope.header(type: hfType.kotlin) { headerScope in
+                        header.applyToHeader(headerScope)
+                    }
+                }
+            }
+            for hfType in Section.HeaderFooterType.canonicalOrder {
+                if let footer = footers[hfType] {
+                    sectionScope.footer(type: hfType.kotlin) { footerScope in
+                        footer.applyToFooter(footerScope)
+                    }
+                }
+            }
         }
     }
 }
@@ -198,6 +319,27 @@ extension Section.SectionType {
         case .nextColumn: return .nextColumn
         case .oddPage: return .oddPage
         case .evenPage: return .evenPage
+        }
+    }
+}
+
+extension Section.PageOrientation {
+    fileprivate var kotlin: Docxkt.PageOrientation {
+        switch self {
+        case .portrait: return .portrait
+        case .landscape: return .landscape
+        }
+    }
+}
+
+extension Section.HeaderFooterType {
+    fileprivate static let canonicalOrder: [Section.HeaderFooterType] = [.default, .first, .even]
+
+    fileprivate var kotlin: HeaderFooterReferenceType {
+        switch self {
+        case .default: return HeaderFooterReferenceType.default_
+        case .first: return HeaderFooterReferenceType.first
+        case .even: return HeaderFooterReferenceType.even
         }
     }
 }

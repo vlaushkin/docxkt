@@ -8,9 +8,12 @@ golden-fixture test harness pinning the wire to upstream.
 
 ## Status
 
-**v1.2.0** — Kotlin Multiplatform release. JVM and Android consumers
-keep the v1 API; iOS / macOS land via an Apple `XCFramework` and an
-optional SwiftUI-style facade Swift Package.
+**v1.3.0** — per-section headers and footers reach the Swift facade.
+`Section(header:, footer:, headers:, footers:, pageSize:)` materializes
+dedicated `word/headerN.xml` / `word/footerN.xml` parts referenced from
+each inline `<w:sectPr>`. JVM and Android consumers keep the v1 API;
+iOS / macOS land via an Apple `XCFramework` and an optional SwiftUI-style
+facade Swift Package.
 
 - ~95% of the OOXML feature surface byte-equal vs upstream
   dolanmiu/docx via golden fixtures.
@@ -29,8 +32,8 @@ optional SwiftUI-style facade Swift Package.
 
 ```kotlin
 dependencies {
-    implementation("io.github.vlaushkin:docxkt-core:1.2.0")     // KMP, picks JVM/Android variant
-    implementation("io.github.vlaushkin:docxkt-patcher:1.2.0")  // template patching (optional)
+    implementation("io.github.vlaushkin:docxkt-core:1.3.0")     // KMP, picks JVM/Android variant
+    implementation("io.github.vlaushkin:docxkt-patcher:1.3.0")  // template patching (optional)
 }
 ```
 
@@ -45,7 +48,7 @@ no longer exists.)
 In your app's `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/vlaushkin/docxkt", from: "1.2.0"),
+.package(url: "https://github.com/vlaushkin/docxkt", from: "1.3.0"),
 // in target dependencies:
 .product(name: "DocxktDSL", package: "docxkt"),
 ```
@@ -156,9 +159,13 @@ let doc = Document {
 try doc.write(to: outputURL)
 ```
 
-`Section` accepts `orientation`, `columns`, `type`, `hasTitlePage`,
-`margins` (twips, or `.inches(...)` / `.cm(...)` factories), and
-`pageBorders`. `Paragraph` and `Cell` carry SwiftUI-style modifiers for
+`Section` accepts `orientation`, `pageSize` (twips), `columns`, `type`,
+`hasTitlePage`, `margins` (twips, or `.inches(...)` / `.cm(...)`
+factories), `pageBorders`, and `header:` / `footer:` (plus the
+dictionary form `headers:` / `footers:` for `.first` / `.even` slots) —
+per-section colontituals materialize as dedicated `headerN.xml` /
+`footerN.xml` parts and are referenced from the inline `<w:sectPr>`.
+`Paragraph` and `Cell` carry SwiftUI-style modifiers for
 alignment, spacing, indentation, borders, shading, and cell-level layout
 (verticalAlign, gridSpan, verticalMerge). `Text` adds `.color(...)`,
 `.size(...)`, `.font(...)`, `.highlight(...)`, `.strike()`,
@@ -258,11 +265,11 @@ Per-feature loop:
    `byNameAndAllAttributes + ignoreWhitespace + checkForIdentical`.
 
 Test counts:
-- `./gradlew :core:jvmTest` — 799 tests
+- `./gradlew :core:jvmTest` — 801 tests
 - `./gradlew :core:macosArm64Test` — 269 tests
 - `./gradlew :core:iosSimulatorArm64Test` — 269 tests
 - `./gradlew :patcher:test` — 104 tests
-- `swift test` (from repo root) — 70 tests (16 smoke + 54 facade-vs-raw fidelity)
+- `swift test` (from repo root) — 77 tests (16 smoke + 58 facade-vs-raw fidelity + 3 misc)
 
 Toolchain: Kotlin 2.3.21, JVM 21, AGP 8.13.x, `explicitApi()` enabled
 in `:core` and `:patcher`. iOS 17+, macOS 14+ (arm64 only —

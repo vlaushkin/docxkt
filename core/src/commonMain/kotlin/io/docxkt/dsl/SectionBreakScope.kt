@@ -25,10 +25,12 @@ import io.docxkt.model.section.SectionVerticalAlign
  * inherits the document-level defaults until another
  * sectionBreak (or the document-trailing sectPr) reconfigures.
  *
- * Supports pgSz, pgMar, and pgBorders. Per-section headers /
- * footers are not yet supported — the document-level
- * `header { }` / `footer { }` apply to the trailing section
- * only.
+ * Supports pgSz, pgMar, pgBorders, columns, line numbering,
+ * page numbers, vertical alignment, section type, title page,
+ * and per-section headers and footers. Each `sectionBreak { }`
+ * may carry its own `header { } / footer { }` — those produce
+ * dedicated `word/headerN.xml` / `word/footerN.xml` parts and
+ * are referenced from this section's inline `<w:sectPr>`.
  */
 @DocxktDsl
 public class SectionBreakScope internal constructor(

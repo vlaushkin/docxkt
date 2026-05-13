@@ -273,14 +273,16 @@ public class DocumentScope internal constructor() {
     /**
      * End the current section. Emits an empty paragraph whose
      * `<w:pPr>` carries a `<w:sectPr>` describing the section that
-     * ENDS here — page size / margins / borders. The document's
-     * trailing `<w:sectPr>` describes the LAST section.
+     * ENDS here — page size / margins / borders / per-section
+     * headers / footers. The document's trailing `<w:sectPr>`
+     * describes the LAST section.
      *
      * Inside [configure], call `a4Portrait()` / `a4Landscape()` /
-     * `margins(...)` / `pageBorders { ... }` exactly as on
-     * [DocumentScope]. Headers and footers on the per-section
-     * level are deferred — `header { }` / `footer { }` apply to
-     * the trailing section only.
+     * `pageSize(widthTwips, heightTwips)` / `margins(...)` /
+     * `pageBorders { ... }` / `header(type) { ... }` /
+     * `footer(type) { ... }` exactly as on [DocumentScope]. The
+     * document-level `header { }` / `footer { }` on
+     * [DocumentScope] still bind to the trailing section.
      */
     public fun sectionBreak(configure: SectionBreakScope.() -> Unit) {
         val scope = SectionBreakScope(context).apply(configure)

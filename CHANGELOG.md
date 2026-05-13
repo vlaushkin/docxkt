@@ -1,5 +1,42 @@
 # Changelog
 
+## 1.3.0
+
+Per-section headers and footers reach the Swift facade. Each `Section`
+inside `Document { … }` now accepts `header:`, `footer:`, and the full
+`headers:` / `footers:` dictionaries — one entry per page type
+(`.default` / `.first` / `.even`). Inline `<w:sectPr>` gets its own
+`<w:headerReference>` / `<w:footerReference>` and the package
+materializes a dedicated `word/headerN.xml` / `word/footerN.xml` part
+per section with matching `[Content_Types].xml` overrides and
+`document.xml.rels` entries.
+
+- `Section(pageSize: .twips(width:, height:, orientation:))` — explicit
+  page dimensions in twips (1 inch = 1440). Use when the page must
+  match a non-A4 aspect (e.g. shrinking the page to an image's ratio).
+  `.inches(width:, height:)` factory also available. Mutually exclusive
+  with `orientation:` (an A4 preset); `pageSize` wins when both set.
+- `Section(header:, footer:)` — convenience that maps to the default
+  page-type slot. For first-page / even-page slots use the dictionary
+  form: `Section(headers: [.first: Header { … }, .default: Header { … }])`.
+- `Section.HeaderFooterType` — native Swift enum (`.default` / `.first`
+  / `.even`) mapped to `Docxkt.HeaderFooterReferenceType`.
+
+Use case this unblocks: `Photo2Docx` and other consumers that emit one
+section per image — different `pgSz` per page — can now attach the
+same header/footer set to every section instead of losing colontituals
+on all pages except the trailing one.
+
+Kotlin core: no API or binary change. The per-section H/F surface on
+`SectionBreakScope` was already in place; v1.3.0 just refreshes the
+docstrings and adds programmatic emit coverage
+(`PerSectionHeaderFooterEmitTest`).
+
+XCFramework: **unchanged** from v1.1.0 — `Package.swift` stays pinned
+to `v1.1.0/Docxkt.xcframework.zip`.
+
+Swift test count: **77** (was 74).
+
 ## 1.2.0
 
 Swift facade `DocxktDSL` reaches typography parity with the Kotlin DSL —
